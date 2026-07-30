@@ -1,4 +1,4 @@
-# Link Watch — Internal Link Dashboard
+# Link Watch — Internal Link Dashboard — Hi-Tech Apparel
 
 A small web dashboard for the IT team that tracks **how many times each
 internal link is used**, **how many people used it**, and whether each link
