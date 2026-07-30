@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Internal Link Dashboard{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="{{ url_for('dashboard') }}">
+      <span class="brand-mark"></span>
+      <span class="brand-name">Link Watch</span>
+      <span class="brand-sub">internal link dashboard</span>
+    </a>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard') }}"
+         class="{{ 'active' if request.endpoint == 'dashboard' }}">Dashboard</a>
+      <a href="{{ url_for('manage') }}"
+         class="{{ 'active' if request.endpoint in ('manage', 'edit_link') }}">Manage links</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  Clicks are counted by the short /go/ links &middot; status from periodic
+  health checks &middot; data stays on this server.
+</footer>
+
+<script>
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('.btn-copy');
+  if (!btn) return;
+  var text = btn.dataset.link;
+  function done() { btn.textContent = 'Copied!';
+                    setTimeout(function () { btn.textContent = 'Copy'; }, 1500); }
+  function fallback() {          // plain http on the intranet, or no permission
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); done();
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(fallback);
+  } else {
+    fallback();
+  }
+});
+</script>
+</body>
+</html>
