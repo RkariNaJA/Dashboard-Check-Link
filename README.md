@@ -43,6 +43,12 @@ User instantly lands on:   http://SERVERNAME:5000/   (your real app)
 Your apps need **no changes at all** — the dashboard never touches them, it just owns the address
 people click.
 
+![The dashboard: 7 links tracked, 5 online, 2 down, with clicks and response times](docs/images/link-watch-dashboard.jpg)
+
+<sub>Seven internal tools tracked — clicks today and all-time, how many different people, response
+time, and a 14-day bar chart per link. The destination addresses are blurred; the `/go/` short
+names are not secret.</sub>
+
 ---
 
 ## What the dashboard shows
@@ -74,6 +80,13 @@ The page refreshes itself every minute, and **Check now** forces an immediate he
   instead of one row per click keeps it small forever.
 - **No internet needed** — plain HTML + CSS pages, no JS framework, no CDN. Works on a server with
   no outside access.
+
+---
+
+![Manage links: add a link, copy its short link, pause or delete it](docs/images/link-watch-manage.jpg)
+
+<sub>**Manage links** — add a destination, get a short link to share, and pause or delete it later.
+The server address in each short link is blurred; the `/go/` part is what makes them readable.</sub>
 
 ---
 

@@ -46,3 +46,9 @@ ENV/
 Thumbs.db
 .DS_Store
 *.log
+
+# ---------------------------------------------------------------------------
+# Screenshot originals — un-blurred, may contain customer data. Keep LOCAL.
+# Only the blurred images in docs/images/ are committed.
+# ---------------------------------------------------------------------------
+docs/images/raw/
