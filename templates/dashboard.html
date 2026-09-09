@@ -4,9 +4,16 @@
 
 <div class="page-head">
   <h1>Dashboard</h1>
-  <form method="post" action="{{ url_for('refresh_now') }}">
-    <button class="btn" type="submit">Check now</button>
-  </form>
+  <div class="actions">
+    {% if summary.startable %}
+    <form method="post" action="{{ url_for('start_all') }}">
+      <button class="btn btn-primary" type="submit">Start all down</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('refresh_now') }}">
+      <button class="btn" type="submit">Check now</button>
+    </form>
+  </div>
 </div>
 <p class="page-note">
   Clicks are counted the moment someone uses a short /go/ link. Health
@@ -60,6 +67,7 @@
         <div class="link-url">&rarr; {{ r.link.url }}</div>
       </td>
       <td>
+        <div class="status-cell">
         {% if not r.link.enabled %}
           <span class="status status-off"><span class="dot"></span>Paused</span>
         {% elif r.check is none %}
@@ -72,6 +80,18 @@
             {%- if r.check.status_code %} &middot; {{ r.check.status_code }}
             {%- elif r.check.error %} &middot; {{ r.check.error }}{% endif %}</span>
         {% endif %}
+        {% if r.startable and r.link.enabled %}
+          {% if r.check and r.check.ok %}
+            <button class="btn btn-small" type="button" disabled
+                    title="Already online - nothing to start">Start</button>
+          {% else %}
+            <form method="post"
+                  action="{{ url_for('start_link', link_id=r.link.id) }}">
+              <button class="btn btn-small" type="submit">Start</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        </div>
       </td>
       <td class="num">
         {% if r.check and r.check.ok %}{{ r.check.response_ms }} ms{% else %}&mdash;{% endif %}

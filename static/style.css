@@ -180,7 +180,10 @@ h2 { font-family: var(--serif); font-size: 19px; margin-bottom: 14px; }
   font-size: 12.5px;
   color: var(--accent);
   font-weight: 600;
-  word-break: break-all;
+  /* wrap at the hyphens, never mid-word: /go/my-app-name breaks
+     as .../my-app- + name, which is still readable */
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .btn-copy { margin-left: 8px; vertical-align: 1px; }
 .link-url {
@@ -293,3 +296,25 @@ h2 { font-family: var(--serif); font-size: 19px; margin-bottom: 14px; }
   padding: 14px 24px;
   background: var(--card);
 }
+
+/* Status pill and its Start button sit side by side; they drop onto two
+   lines only if the column gets too narrow. */
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Keep the button on the status line even when the error text is long
+     ("Down - ConnectionError"). .table-wrap scrolls if the table gets
+     too wide, so nothing is ever cut off. */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* Start button: greyed out, not hidden, when the app is already online -
+   so the column never jumps and the feature stays discoverable. */
+.btn:disabled {
+  color: var(--ink-3);
+  background: var(--paper);
+  cursor: default;
+}
+.btn:disabled:hover { border-color: var(--line); }

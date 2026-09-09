@@ -88,6 +88,98 @@ immediate health check.
 
 ---
 
+## Start buttons — bringing the apps back after a reboot
+
+When the server restarts, every internal app that was running in a terminal
+goes down with it. Instead of opening a terminal for each one, you can give a
+link a **start command**. It then gets a **Start** button next to its status,
+and a **Start all down** button appears at the top of the dashboard.
+
+```
+Reboot  ->  you start the dashboard   (one terminal, by hand)
+        ->  click "Start all down"    (on the dashboard)
+        ->  every other app comes back
+```
+
+### Telling the dashboard how to start an app
+
+Add one `[process:<name>]` section per app at the bottom of `config.ini`:
+
+```ini
+[process:my-app]
+link    = my-app
+command = npm run dev
+cwd     = D:\Path\To\my-app
+```
+
+| Key | Meaning |
+|---|---|
+| section name | any short name — it also names the log file (`logs\my-app.log`) |
+| `link` | the `/go/<slug>` name of the link this app sits behind |
+| `command` | exactly what you would type in the terminal |
+| `cwd` | the folder you would type it in |
+
+**Where to find the slug:** it is the `/go/...` line shown under each link
+name on the dashboard. `http://SERVERNAME:8090/go/my-app` → the slug is
+`my-app`. It must match **exactly**, or no button appears.
+
+**Two processes behind one link** (a backend and a frontend): give both
+sections the same `link`. One button starts both, in the order they appear
+in the file.
+
+```ini
+[process:my-dashboard-backend]
+link    = my-dashboard
+command = py .\serve.py
+cwd     = D:\Path\To\my-dashboard
+
+[process:my-dashboard-frontend]
+link    = my-dashboard
+command = py -m http.server 8080 --directory dist
+cwd     = D:\Path\To\my-dashboard\frontend
+```
+
+> The dashboard itself is deliberately **not** listed — it cannot start
+> itself. It is the one thing you launch by hand after a reboot.
+
+### What happens when you click Start
+
+1. The dashboard pings that link **right now** to see whether it is already
+   answering. If it is, it refuses and tells you so. This is what stops a
+   second copy being launched to fight the first one for the same port.
+2. Otherwise every process for that link is started, **detached** — so they
+   keep running after you close the dashboard's terminal.
+3. Everything each app prints is appended to `logs\<section name>.log`.
+4. After a few seconds the link is checked again and the status updates.
+
+An app that starts and then dies on its own is **not** reported as an error.
+The health check is what tells you whether it really came up — and the log
+file tells you why it did not.
+
+> The status check is always **live**, never the last saved result. Right
+> after a reboot the newest stored check is stale and still says "online",
+> which would refuse to start exactly the apps this button exists for.
+
+### Checking your configuration
+
+Every time the dashboard starts, it reports what it found:
+
+```
+[runner] Start buttons for 3 link(s): my-app, my-dashboard, ...
+```
+
+If a slug in `config.ini` matches no link on the dashboard, it says so
+instead of silently leaving the button out:
+
+```
+[runner] WARNING: config.ini has link = 'my-app', but no link on the
+         dashboard uses that slug - no button for it
+```
+
+That warning is the usual explanation for a missing Start button.
+
+---
+
 ## How to check and change the port
 
 The dashboard uses **port 8090** by default (set in `config.ini`):
@@ -151,6 +243,29 @@ New-NetFirewallRule -DisplayName "Link Watch Dashboard" -Direction Inbound -Prot
 4. Delete the demo links (Manage links → Delete) and add your real ones
 5. Team opens `http://SERVERNAME:8090`
 
+### Updating a server that is already running
+
+Copying the *whole* folder over an existing install is **not** safe — it
+would overwrite two files you care about:
+
+| File | Why not to overwrite it |
+|---|---|
+| `data.db` | All your links, click history and check history. Copying over it loses everything |
+| `config.ini` | The server's copy has `sample_mode = false`, the real port, and your `[process:...]` sections |
+
+So when updating, copy only the code:
+
+```
+app.py  collector.py  runner.py  db.py  templates\  static\
+```
+
+and for `config.ini`, **paste any new settings into the server's existing
+file** rather than replacing it. Then stop the dashboard and start it again —
+Python does not pick up new code while it is running.
+
+> `requirements.txt` has not changed since the first release, so there is
+> normally no need to run `pip install` again.
+
 ### Start automatically after a reboot (recommended)
 1. On the server open **Task Scheduler** → **Create Task…**
 2. **General** tab: name it `Link Watch`, tick **Run whether user is logged
@@ -161,6 +276,15 @@ New-NetFirewallRule -DisplayName "Link Watch Dashboard" -Direction Inbound -Prot
    - Add arguments: `"C:\path\to\DashBoard Check link\app.py"`
    - Start in: `C:\path\to\DashBoard Check link`
 5. OK → enter the account password. Done — the dashboard now survives reboots.
+
+**No administrator rights?** Step 2's "Run whether user is logged on or not"
+and step 3's "At startup" both need elevation. A trigger of **At log on** for
+your own account does not. The dashboard then starts by itself as soon as you
+RDP into the server — one step later than "At startup", but it needs no
+special permissions.
+
+Either way, once the dashboard comes back on its own, the only thing left to
+do after a reboot is click **Start all down** to bring the other apps up.
 
 ---
 
@@ -174,6 +298,13 @@ New-NetFirewallRule -DisplayName "Link Watch Dashboard" -Direction Inbound -Prot
 | `[health] timeout_seconds` | How long to wait before calling a link Down | `10` |
 | `[health] ssl_verify` | `false` accepts self-signed internal certificates | `false` |
 | `[app] sample_mode` | `true` = create demo links/history when database is empty. Set `false` on the server | `true` |
+| `[process:<name>] link` | The `/go/<slug>` name of the link this app is behind | — |
+| `[process:<name>] command` | Exactly what you would type in the terminal to start it | — |
+| `[process:<name>] cwd` | The folder to run that command in | — |
+
+A `[process:...]` section missing any of the three keys is ignored, with a
+message at startup saying which section was skipped. See **"Start buttons"**
+above for the full explanation.
 
 ---
 
@@ -221,6 +352,7 @@ error code or no answer within 10 seconds.
 | **APScheduler** | The background timer that runs health checks every 5 minutes while the web app keeps serving pages | Runs inside the same process — no separate service or Task Scheduler entry needed for the checks |
 | **requests** | Makes the health-check calls to each destination URL and measures response time | The standard way to make HTTP calls in Python. Configured with `trust_env=False` so checks go **directly** to your apps, never through the company proxy (a proxy would answer instead of the real link and fake the result) |
 | **sqlite3** *(built into Python)* | The database — one file, `data.db` | Nothing to install or administer; a single file holds everything and is trivial to back up |
+| **subprocess** *(built into Python)* | Starts the app behind a link when you click **Start** | Each app is launched through `cmd /c` (so both `py ...` and `npm ...` work the same way) and detached from the dashboard's console, so it keeps running after you close that terminal |
 | **Jinja2** *(comes with Flask)* | Fills the HTML templates in `templates/` with live numbers | Standard Flask templating |
 
 No JavaScript frameworks, no internet CDNs, no external services — the web
@@ -246,12 +378,15 @@ daily chart (group by day).
 
 | File | What it is |
 |---|---|
-| `app.py` | The web app: pages, short-link redirect (`/go/...`), scheduler |
+| `app.py` | The web app: pages, short-link redirect (`/go/...`), scheduler, Start buttons |
 | `collector.py` | Health checks (ping every link, save status + speed) |
+| `runner.py` | Starts the app behind a link — reads `[process:...]`, launches it detached |
 | `db.py` | Database (SQLite) — tables and click recording |
 | `sample_data.py` | Demo data for local testing only |
-| `config.ini` | All settings (port, intervals, sample mode) |
+| `config.ini` | All settings (port, intervals, sample mode, start commands) |
 | `data.db` | The database file — **this is your data; back it up** |
+| `logs/` | What each started app printed — created on the first Start. Not backed up |
+| `tests/` | `python -m pytest tests/` — the launcher tests start real processes |
 | `templates/`, `static/` | The web pages and styling |
 | `README.md` | GitHub landing page — what the dashboard is, for anyone |
 | `docs/DEVELOPER-GUIDE.md` | this file — setup, deployment, settings, internals |
@@ -268,3 +403,8 @@ history are all inside this one file).
 | Link shows Down but works in browser | The server pings the **destination URL** directly — make sure that URL is reachable *from the server itself*, not only from your PC |
 | Clicks not increasing | Users are probably opening the destination directly instead of the short `/go/` link |
 | Works on server, not from other PCs | Open the firewall port (command above) |
+| **No Start button on a link** | The slug in `config.ini` must match the link's `/go/...` name exactly. Restart the dashboard and read the `[runner]` lines — a mismatch is named there |
+| **No Start buttons at all, and no "Start all down"** | There are no `[process:...]` sections in `config.ini`. On the server, check with `findstr /C:"[process:" config.ini` |
+| **Says "Started" but the link stays Down** | The app was launched but did not come up. Open `logs\<name>.log` — the reason is at the bottom |
+| **"already online - left it alone"** | Something is already answering on that address. That is the guard doing its job; it will not launch a second copy |
+| **A Vite app starts but the link is still Down** | If its usual port was taken, Vite quietly moves to the next one. `logs\<name>.log` shows the port it actually chose |

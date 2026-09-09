@@ -2,17 +2,19 @@
 import configparser
 import os
 import re
+import time
 from datetime import date, datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import (Flask, flash, redirect, render_template, request, url_for)
 
 import db
+import runner
 from collector import check_one_link, run_health_checks
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-config = configparser.ConfigParser()
+config = configparser.ConfigParser(interpolation=None)
 config.read(os.path.join(BASE_DIR, "config.ini"))
 
 CHECK_MIN = config.getint("health", "check_interval_minutes", fallback=5)
@@ -26,7 +28,12 @@ app = Flask(__name__)
 app.secret_key = "internal-link-dashboard"
 
 TREND_DAYS = 14
-RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static"}
+RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static", "services"}
+
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+# how long to let an app boot before asking whether it came up
+START_GRACE_SECONDS = 4
+PROCESSES = runner.load_processes(config)
 
 
 def slugify(text):
@@ -84,6 +91,7 @@ def load_dashboard_rows():
                 "trend": [{"day": d, "clicks": per_day.get(d, 0)} for d in days],
                 "trend_max": max([per_day.get(d, 0) for d in days] + [1]),
                 "check": latest,
+                "startable": link["slug"] in PROCESSES,
             })
     return rows
 
@@ -97,6 +105,7 @@ def summary_of(rows):
         "offline": sum(1 for r in checked if not r["check"]["ok"]),
         "clicks_today": sum(r["today_clicks"] for r in active),
         "clicks_total": sum(r["total_clicks"] for r in active),
+        "startable": sum(1 for r in active if r["startable"]),
     }
 
 
@@ -200,6 +209,87 @@ def delete_link(link_id):
     return redirect(url_for("manage"))
 
 
+# ------------------------------------------------------- starting the apps
+
+def why_not_start(link, processes):
+    """Reason this link cannot be started right now, or None if it can.
+
+    The 'is it up?' answer comes from a live check, never from the checks
+    table: right after a reboot the newest stored row is stale and still
+    says 'online', which would refuse to start the very apps this button
+    exists for.
+    """
+    if not processes.get(link["slug"]):
+        return f"No start command is configured for '{link['name']}'."
+    if check_one_link(link["id"], link["url"], TIMEOUT_S, SSL_VERIFY):
+        return f"'{link['name']}' is already online - left it alone."
+    return None
+
+
+def start_and_report(links, processes):
+    """Launch everything for these links, wait once, then re-check them.
+
+    One wait for the whole batch, so starting four apps costs one pause
+    and not four. Returns a list of human-readable problems.
+    """
+    problems = []
+    for link in links:
+        for result in runner.start_link(link["slug"], processes, LOG_DIR):
+            if not result.ok:
+                problems.append(f"{link['name']} ({result.name}): "
+                                f"{result.message}")
+    if links:
+        time.sleep(START_GRACE_SECONDS)
+        for link in links:
+            check_one_link(link["id"], link["url"], TIMEOUT_S, SSL_VERIFY)
+    return problems
+
+
+@app.route("/links/<int:link_id>/start", methods=["POST"])
+def start_link(link_id):
+    with db.get_conn() as conn:
+        link = conn.execute("SELECT * FROM links WHERE id = ?",
+                            (link_id,)).fetchone()
+    if link is None:
+        flash("Link not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    reason = why_not_start(link, PROCESSES)
+    if reason:
+        flash(reason, "error")
+        return redirect(url_for("dashboard"))
+
+    problems = start_and_report([link], PROCESSES)
+    if problems:
+        flash("Could not start - " + "; ".join(problems), "error")
+    else:
+        flash(f"Started '{link['name']}'. If it stays down, see "
+              f"logs/ for what it printed.", "ok")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/services/start-all", methods=["POST"])
+def start_all():
+    with db.get_conn() as conn:
+        links = conn.execute(
+            "SELECT * FROM links WHERE enabled = 1 ORDER BY name").fetchall()
+    to_start = [ln for ln in links if why_not_start(ln, PROCESSES) is None]
+    if not to_start:
+        flash("Nothing to start - every app with a start command is "
+              "already online.", "ok")
+        return redirect(url_for("dashboard"))
+
+    problems = start_and_report(to_start, PROCESSES)
+    names = ", ".join(ln["name"] for ln in to_start)
+    if problems:
+        flash(f"Started {len(to_start)} ({names}), but: "
+              + "; ".join(problems), "error")
+    else:
+        flash(f"Started {len(to_start)}: {names}. If any stays down, see "
+              f"logs/ for what it printed.", "ok")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/refresh", methods=["POST"])
 def refresh_now():
     run_health_checks(TIMEOUT_S, SSL_VERIFY)
@@ -208,6 +298,26 @@ def refresh_now():
 
 
 # --------------------------------------------------------------- background
+
+def report_start_button_config():
+    """Say at startup which links got a Start button, and which did not.
+
+    A [process:...] section whose slug matches no link produces no button
+    and no error - the hardest kind of problem to spot. Name it instead.
+    """
+    with db.get_conn() as conn:
+        slugs = [r["slug"] for r in conn.execute("SELECT slug FROM links")]
+    if not PROCESSES:
+        print("[runner] no [process:...] sections in config.ini - "
+              "no Start buttons will appear")
+        return
+    matched = [s for s in PROCESSES if s in slugs]
+    print(f"[runner] Start buttons for {len(matched)} link(s): "
+          f"{', '.join(matched) if matched else 'none'}")
+    for slug in runner.unmatched_slugs(PROCESSES, slugs):
+        print(f"[runner] WARNING: config.ini has link = {slug!r}, but no "
+              f"link on the dashboard uses that slug - no button for it")
+
 
 def start_scheduler():
     scheduler = BackgroundScheduler(daemon=True)
@@ -224,6 +334,7 @@ def main():
         import sample_data
         db.seed_samples(PORT)
         sample_data.seed_demo_hits(TREND_DAYS)
+    report_start_button_config()
     start_scheduler()
     print(f"Dashboard running on http://localhost:{PORT}")
     app.run(host=HOST, port=PORT, debug=False, use_reloader=False)

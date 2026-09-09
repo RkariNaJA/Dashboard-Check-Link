@@ -28,6 +28,7 @@ def run_health_checks(timeout_seconds, ssl_verify):
 
 
 def check_one_link(link_id, url, timeout_seconds, ssl_verify):
+    """Ping one link, record the result, and report whether it answered."""
     started = time.perf_counter()
     ok, status_code, error = 0, None, None
     try:
@@ -53,3 +54,4 @@ def check_one_link(link_id, url, timeout_seconds, ssl_verify):
                VALUES (?, datetime('now', 'localtime'), ?, ?, ?, ?)""",
             (link_id, ok, status_code, response_ms, error),
         )
+    return bool(ok)

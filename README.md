@@ -55,7 +55,7 @@ names are not secret.</sub>
 
 | Column | Meaning |
 |---|---|
-| **Status** | 🟢 Online / 🔴 Down — checked every 5 minutes |
+| **Status** | 🟢 Online / 🔴 Down — checked every 5 minutes, with a **Start** button beside it when the app is down |
 | **Response** | how fast the link answered, in milliseconds |
 | **Today** | clicks today / how many different people today |
 | **Total** | all-time clicks / all-time different people |
@@ -74,6 +74,11 @@ The page refreshes itself every minute, and **Check now** forces an immediate he
   is a question the database can answer.
 - **Health checks on a timer** — every destination is called directly (never through the company
   proxy, which would answer instead of the real app and fake the result).
+- **Start an app again without opening a terminal** — when the server reboots, every internal app
+  goes down with it. Each link can be given a start command, which puts a **Start** button next to
+  its status, plus **Start all down** to bring everything back in one click. It refuses to start
+  something that is already answering, so you can never end up with two copies fighting over the
+  same port.
 - **Pause without breaking bookmarks** — a paused link stops counting and checking but keeps
   forwarding, so nobody's saved link dies.
 - **Tiny, backup-friendly storage** — one SQLite file, `data.db`. Storing one row per day + IP
@@ -106,6 +111,9 @@ the real server.
 > The dashboard has to stay running for clicks to be counted — the short links are served by it.
 > On a server, start it automatically (Task Scheduler recipe in the guide).
 >
+> The dashboard cannot start *itself* — it is the one thing you launch by hand (or by scheduled
+> task) after a reboot. Once it is up, its Start buttons bring back everything else.
+>
 > Clicks are only counted through the **short** link. Opening the destination address directly is
 > invisible to the dashboard.
 
@@ -118,8 +126,10 @@ the real server.
 | **Built with** | Python + [Flask](https://flask.palletsprojects.com/) 3, SQLite (built in), [APScheduler](https://apscheduler.readthedocs.io/) for the 5-minute checks, [requests](https://requests.readthedocs.io/) for the pings, Jinja2 templates |
 | **The app** | [`app.py`](app.py) — pages, the `/go/<slug>` counting redirect, the scheduler |
 | **Health checks** | [`collector.py`](collector.py) — pings every link, saves status + response time |
+| **Start buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/` |
 | **Storage** | [`db.py`](db.py) — 3 tables: `links`, `daily_hits` (per day + IP), `checks` (kept 30 days) |
-| **Settings** | [`config.ini`](config.ini) — port, check interval, timeout, SSL verification, sample mode |
+| **Settings** | [`config.ini`](config.ini) — port, check interval, timeout, SSL verification, sample mode, start commands |
+| **Tests** | [`tests/`](tests) — `python -m pytest tests/` (the launcher tests spawn real processes) |
 
 Default port is **8090** (8080 is taken by another app on the dev machine). Changing the port
 changes every short link, so pick it before sharing links with people.
