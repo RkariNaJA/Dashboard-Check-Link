@@ -1,10 +1,20 @@
 {% extends "base.html" %}
+{% block title %}Dashboard · Link Watch{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block content %}
 
+{% set pct = (summary.online * 100 // summary.total) if summary.total else 0 %}
+
 <div class="page-head">
-  <h1>Dashboard</h1>
+  <div>
+    <h1>Dashboard</h1>
+    <p class="page-note">
+      Clicks are counted the moment someone uses a short /go/ link. Health
+      checks run every {{ check_interval }} min.
+    </p>
+  </div>
   <div class="actions">
+    <span class="live"><span class="live-dot"></span>Live</span>
     {% if summary.startable %}
     <form method="post" action="{{ url_for('start_all') }}">
       <button class="btn btn-primary" type="submit">Start all down</button>
@@ -15,13 +25,23 @@
     </form>
   </div>
 </div>
-<p class="page-note">
-  Clicks are counted the moment someone uses a short /go/ link. Health
-  checks run every {{ check_interval }} min. This page reloads itself
-  every minute.
-</p>
 
-<div class="stat-row">
+<div class="stat-band">
+  <div class="stat dial-tile {{ 'is-warn' if summary.offline else 'is-good' }}">
+    <div class="dial" style="--pct: {{ pct }}">
+      <div class="dial-face">
+        <span class="dial-num">{{ pct }}<i>%</i></span>
+        <span class="dial-cap">healthy</span>
+      </div>
+    </div>
+    <div>
+      <div class="stat-label">Fleet health</div>
+      <div class="stat-foot">
+        {{ summary.online }} of {{ summary.total }} responding
+        {%- if summary.offline %} &middot; {{ summary.offline }} down{% endif %}
+      </div>
+    </div>
+  </div>
   <div class="stat">
     <div class="stat-label">Links tracked</div>
     <div class="stat-value">{{ summary.total }}</div>
@@ -30,7 +50,7 @@
     <div class="stat-label">Online</div>
     <div class="stat-value ok-text">{{ summary.online }}</div>
   </div>
-  <div class="stat">
+  <div class="stat {{ 'stat-alert' if summary.offline }}">
     <div class="stat-label">Down</div>
     <div class="stat-value {{ 'bad-text' if summary.offline else '' }}">{{ summary.offline }}</div>
   </div>
@@ -61,12 +81,12 @@
   <tbody>
   {% for r in rows %}
     <tr class="{{ 'row-disabled' if not r.link.enabled }}">
-      <td>
+      <td class="cell-link">
         <div class="link-name">{{ r.link.name }}</div>
         <div class="short-link">/go/{{ r.link.slug }}</div>
         <div class="link-url">&rarr; {{ r.link.url }}</div>
       </td>
-      <td>
+      <td data-label="Status">
         <div class="status-cell">
         {% if not r.link.enabled %}
           <span class="status status-off"><span class="dot"></span>Paused</span>
@@ -93,28 +113,42 @@
         {% endif %}
         </div>
       </td>
-      <td class="num">
-        {% if r.check and r.check.ok %}{{ r.check.response_ms }} ms{% else %}&mdash;{% endif %}
+      <td class="num" data-label="Response">
+        {% if r.check and r.check.ok %}
+          {# meter is capped at 400 ms: that is the range internal apps
+             actually live in, so differences stay visible #}
+          {% set msw = [[(r.check.response_ms / 4) | round | int, 100] | min, 6] | max %}
+          <span class="ms">
+            <span>{{ r.check.response_ms }} ms</span>
+            <span class="ms-bar"><span class="ms-fill" style="width: {{ msw }}%"></span></span>
+          </span>
+        {% else %}&mdash;{% endif %}
       </td>
-      <td class="num">{{ "{:,}".format(r.today_clicks) }}
-        <span class="dim">/ {{ r.today_visitors }}</span></td>
-      <td class="num">{{ "{:,}".format(r.total_clicks) }}
-        <span class="dim">/ {{ r.total_visitors }}</span></td>
-      <td>
-        <svg class="spark" width="124" height="34" viewBox="0 0 124 34"
+      <td class="num" data-label="Today"><span>{{ "{:,}".format(r.today_clicks) }}
+        <span class="dim">/ {{ r.today_visitors }}</span></span></td>
+      <td class="num" data-label="Total"><span>{{ "{:,}".format(r.total_clicks) }}
+        <span class="dim">/ {{ r.total_visitors }}</span></span></td>
+      <td data-label="Last 14 days">
+        {# Each day is an extruded column: lit top face, front face, shaded
+           right face. Today's column is cyan so "now" is findable. #}
+        <svg class="spark" width="134" height="44" viewBox="0 0 134 44"
              role="img" aria-label="clicks per day, last 14 days">
           {% for p in r.trend %}
-            {% set h = (p.clicks / r.trend_max * 30) | round(1) %}
-            <rect x="{{ loop.index0 * 9 }}"
-                  y="{{ 34 - (h if p.clicks else 1.5) }}"
-                  width="7" height="{{ h if p.clicks else 1.5 }}" rx="1.5"
-                  class="{{ 'spark-bar' if p.clicks else 'spark-zero' }}">
+            {% set h = ((p.clicks / r.trend_max * 26) | round(1)) if p.clicks else 2 %}
+            {% set x = loop.index0 * 9 %}
+            {% set y = 38 - h %}
+            <g class="{% if not p.clicks %}col-zero{% elif loop.last %}col-today{% endif %}">
               <title>{{ p.day }} &middot; {{ p.clicks }} clicks</title>
-            </rect>
+              <polygon class="col-top"
+                       points="{{ x }},{{ y }} {{ x + 4 }},{{ y - 4 }} {{ x + 11 }},{{ y - 4 }} {{ x + 7 }},{{ y }}"/>
+              <polygon class="col-side"
+                       points="{{ x + 7 }},{{ y }} {{ x + 11 }},{{ y - 4 }} {{ x + 11 }},34 {{ x + 7 }},38"/>
+              <rect class="col-face" x="{{ x }}" y="{{ y }}" width="7" height="{{ h }}"/>
+            </g>
           {% endfor %}
         </svg>
       </td>
-      <td class="dim">
+      <td class="dim" data-label="Last checked">
         {% if r.check %}{{ r.check.checked_at[5:16] }}{% else %}&mdash;{% endif %}
       </td>
     </tr>

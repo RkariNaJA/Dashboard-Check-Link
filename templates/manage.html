@@ -3,7 +3,13 @@
 {% block content %}
 
 <div class="page-head">
-  <h1>Manage links</h1>
+  <div>
+    <h1>Manage links</h1>
+    <p class="page-note">
+      Every link here hands out a short <code>/go/</code> address. Share that,
+      not the raw one, and the clicks land on the dashboard.
+    </p>
+  </div>
 </div>
 
 <section class="card">
@@ -15,13 +21,13 @@
     </div>
     <div class="field grow">
       <label for="url">Destination URL <span class="hint">your real app</span></label>
-      <input id="url" name="url" required
+      <input id="url" name="url" required class="input-mono"
              placeholder="http://SERVERNAME:5000/">
     </div>
     <div class="field">
       <label for="slug">Short name
         <span class="hint">optional &middot; made from the name if empty</span></label>
-      <input id="slug" name="slug" placeholder="hr-form">
+      <input id="slug" name="slug" class="input-mono" placeholder="hr-form">
     </div>
     <button class="btn btn-primary" type="submit">Add link</button>
   </form>
@@ -33,56 +39,64 @@
   </p>
 </section>
 
-<section class="card">
+<div class="table-head">
   <h2>Your links</h2>
-  {% if links %}
-  <div class="table-wrap">
-  <table class="links-table manage-table">
-    <thead>
-      <tr><th>Name</th><th>Short link (share this)</th><th>Destination</th>
-          <th>State</th><th></th></tr>
-    </thead>
-    <tbody>
-    {% for link in links %}
-      {% set short = request.url_root.rstrip('/') ~ '/go/' ~ link.slug %}
-      <tr class="{{ 'row-disabled' if not link.enabled }}">
-        <td class="link-name">{{ link.name }}</td>
-        <td>
+  {% if links %}<span class="stat-foot">{{ links|length }} total</span>{% endif %}
+</div>
+
+{% if links %}
+<div class="table-wrap">
+<table class="links-table manage-table">
+  <thead>
+    <tr><th>Name</th><th>Short link (share this)</th><th>Destination</th>
+        <th>State</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for link in links %}
+    {% set short = request.url_root.rstrip('/') ~ '/go/' ~ link.slug %}
+    <tr class="{{ 'row-disabled' if not link.enabled }}">
+      <td class="link-name cell-link">{{ link.name }}</td>
+      <td data-label="Short link">
+        <div class="short-cell">
           <span class="short-link">{{ short }}</span>
           <button class="btn btn-small btn-copy" type="button"
                   data-link="{{ short }}">Copy</button>
-        </td>
-        <td class="link-url">{{ link.url }}</td>
-        <td>
-          {% if link.enabled %}
-            <span class="status status-ok"><span class="dot"></span>Tracking</span>
-          {% else %}
-            <span class="status status-off"><span class="dot"></span>Paused</span>
-          {% endif %}
-        </td>
-        <td class="actions">
-          <a class="btn btn-small" href="{{ url_for('edit_link', link_id=link.id) }}">Edit</a>
-          <form method="post" action="{{ url_for('toggle_link', link_id=link.id) }}">
-            <button class="btn btn-small" type="submit">
-              {{ 'Pause' if link.enabled else 'Resume' }}</button>
+        </div>
+      </td>
+      <td class="link-url" data-label="Destination">{{ link.url }}</td>
+      <td data-label="State">
+        {% if link.enabled %}
+          <span class="status status-ok"><span class="dot"></span>Tracking</span>
+        {% else %}
+          <span class="status status-off"><span class="dot"></span>Paused</span>
+        {% endif %}
+      </td>
+      <td class="cell-actions" data-label="Actions">
+        <div class="actions">
+        <a class="btn btn-small" href="{{ url_for('edit_link', link_id=link.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('toggle_link', link_id=link.id) }}">
+          <button class="btn btn-small" type="submit">
+            {{ 'Pause' if link.enabled else 'Resume' }}</button>
+        </form>
+        <form method="post" action="{{ url_for('delete_link', link_id=link.id) }}"
+              onsubmit="return confirm('Delete “{{ link.name }}” and all of its click history?');">
+          <button class="btn btn-small btn-danger" type="submit">Delete</button>
           </form>
-          <form method="post" action="{{ url_for('delete_link', link_id=link.id) }}"
-                onsubmit="return confirm('Delete “{{ link.name }}” and all of its click history?');">
-            <button class="btn btn-small btn-danger" type="submit">Delete</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  <p class="page-note">
-    <strong>Pause</strong> stops counting and health checks, but the short
-    link keeps forwarding so nobody's bookmark breaks.
-  </p>
-  {% else %}
-  <p class="page-note">No links yet — add the first one above.</p>
-  {% endif %}
-</section>
+        </div>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="page-note">
+  <strong>Pause</strong> stops counting and health checks, but the short
+  link keeps forwarding so nobody's bookmark breaks.
+</p>
+{% else %}
+<div class="empty">
+  <p>No links yet — add the first one above.</p>
+</div>
+{% endif %}
 
 {% endblock %}

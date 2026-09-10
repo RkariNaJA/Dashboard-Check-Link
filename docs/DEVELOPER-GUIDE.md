@@ -266,6 +266,12 @@ Python does not pick up new code while it is running.
 > `requirements.txt` has not changed since the first release, so there is
 > normally no need to run `pip install` again.
 
+> **Copy the whole `static\` folder, not single files.** The styling is now
+> split across three stylesheets (`tokens.css`, `style.css`,
+> `components.css`). If one is missing the pages still load, but with no
+> styling at all — plain black text on white. That is the symptom to look for
+> if the dashboard suddenly looks unformatted after an update.
+
 ### Start automatically after a reboot (recommended)
 1. On the server open **Task Scheduler** → **Create Task…**
 2. **General** tab: name it `Link Watch`, tick **Run whether user is logged
@@ -357,7 +363,52 @@ error code or no answer within 10 seconds.
 
 No JavaScript frameworks, no internet CDNs, no external services — the web
 pages are plain HTML + CSS (plus ~15 lines of JS for the Copy button), so
-everything works on a server with **no internet access**.
+everything works on a server with **no internet access**. That rule covers
+the styling too: every font is one that ships with Windows, and the browser
+tab icon is written into the page itself rather than loaded as a file, so a
+page never waits on something it cannot reach.
+
+### The styling (`static/`)
+
+Three stylesheets, loaded in this order by `templates/base.html`. The order
+matters — each one relies on the one before it.
+
+| File | Holds | Change it when |
+|---|---|---|
+| `tokens.css` | Every colour, spacing step, corner radius and shadow — twice: once for the light theme, once for dark | You want to **recolour** the dashboard |
+| `style.css` | The page shell: header bar, headings, cards, form fields, buttons, footer | You are changing a control or the page frame |
+| `components.css` | The data parts: stat tiles, the health dial, the link table, status pills, the 14-day chart | You are changing how the numbers are displayed |
+
+**To change a colour, edit `tokens.css`.** Neither `style.css` nor
+`components.css` contains a single colour of its own — every rule points at a
+token like `var(--accent)`, so one edit there reaches every page. The tokens
+are listed twice in that file: the plain `:root` block is the light theme, and
+the `@media (prefers-color-scheme: dark)` block below it overrides the same
+names for dark. Change a colour in one block and the other theme keeps its own.
+
+The **one exception** is the logo. `templates/base.html` holds its colours
+directly, in three places that must be changed together or the mark will not
+match itself:
+
+| In `base.html` | What it colours |
+|---|---|
+| the `<linearGradient id="lw-face">` stops, and the `#312E81` block behind it | the mark in the header bar |
+| the `%23...` codes inside the `rel="icon"` line | the same mark as the browser-tab icon (a `#` is written `%23` inside that line) |
+| `<meta name="theme-color">` | the browser's own bar colour on mobile |
+
+They sit outside the token system because an icon has to be readable before
+any stylesheet has loaded.
+
+Dark mode follows the **Windows** theme setting (Settings → Personalisation →
+Colours). There is no toggle in the app and nothing is stored — the browser
+reports which mode Windows is in, and the matching tokens apply.
+
+Below 900px wide the link table stops being a table: each row becomes its own
+card. That works because every `<td>` in `templates/dashboard.html` and
+`templates/manage.html` carries a `data-label="..."` attribute — on a narrow
+screen CSS prints that label beside the value, since the real column headings
+are hidden. **If you add a column, give its cells a `data-label` too**, or it
+will lose its heading on phones.
 
 ### The database (3 tables in `data.db`)
 
@@ -387,7 +438,8 @@ daily chart (group by day).
 | `data.db` | The database file — **this is your data; back it up** |
 | `logs/` | What each started app printed — created on the first Start. Not backed up |
 | `tests/` | `python -m pytest tests/` — the launcher tests start real processes |
-| `templates/`, `static/` | The web pages and styling |
+| `templates/` | The web pages (Jinja2): `base.html` frame, `dashboard.html`, `manage.html`, `edit.html`, `missing.html` |
+| `static/` | The styling — `tokens.css` (colours, both themes), `style.css` (shell, forms, buttons), `components.css` (tiles, dial, table, charts) |
 | `README.md` | GitHub landing page — what the dashboard is, for anyone |
 | `docs/DEVELOPER-GUIDE.md` | this file — setup, deployment, settings, internals |
 

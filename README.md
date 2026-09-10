@@ -53,13 +53,19 @@ names are not secret.</sub>
 
 ## What the dashboard shows
 
+Across the top, a **fleet health dial** shows at a glance what share of your links are answering
+right now, next to the running totals — links tracked, online, down, clicks today, clicks all-time.
+The **Down** tile turns red the moment anything stops answering.
+
+Then one row per link:
+
 | Column | Meaning |
 |---|---|
 | **Status** | 🟢 Online / 🔴 Down — checked every 5 minutes, with a **Start** button beside it when the app is down |
-| **Response** | how fast the link answered, in milliseconds |
+| **Response** | how fast the link answered, in milliseconds, with a small meter beside the number |
 | **Today** | clicks today / how many different people today |
 | **Total** | all-time clicks / all-time different people |
-| **Last 14 days** | a small bar chart of clicks per day |
+| **Last 14 days** | a 14-day bar chart of clicks per day — today's bar is highlighted |
 | **Last checked** | when the last health check ran |
 
 The page refreshes itself every minute, and **Check now** forces an immediate health check.
@@ -83,8 +89,13 @@ The page refreshes itself every minute, and **Check now** forces an immediate he
   forwarding, so nobody's saved link dies.
 - **Tiny, backup-friendly storage** — one SQLite file, `data.db`. Storing one row per day + IP
   instead of one row per click keeps it small forever.
-- **No internet needed** — plain HTML + CSS pages, no JS framework, no CDN. Works on a server with
-  no outside access.
+- **Reads on any screen** — on a phone or a narrow window the table stops being a table: each link
+  becomes its own card carrying its column labels, so nothing has to be scrolled sideways.
+- **Light and dark** — the dashboard follows the Windows theme setting automatically. No toggle to
+  find, nothing to configure.
+- **No internet needed** — plain HTML + CSS pages, no JS framework, no CDN, no web fonts. Every
+  font ships with Windows and the tab icon is inlined, so nothing is ever fetched from outside.
+  Works on a server with no outside access.
 
 ---
 
@@ -128,6 +139,7 @@ the real server.
 | **Health checks** | [`collector.py`](collector.py) — pings every link, saves status + response time |
 | **Start buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/` |
 | **Storage** | [`db.py`](db.py) — 3 tables: `links`, `daily_hits` (per day + IP), `checks` (kept 30 days) |
+| **Look and feel** | [`static/`](static) — `tokens.css` (every colour, both themes), `style.css` (page shell, forms, buttons), `components.css` (stat tiles, health dial, link table, charts) |
 | **Settings** | [`config.ini`](config.ini) — port, check interval, timeout, SSL verification, sample mode, start commands |
 | **Tests** | [`tests/`](tests) — `python -m pytest tests/` (the launcher tests spawn real processes) |
 

@@ -5,6 +5,10 @@
 <div class="page-head">
   <h1>Edit link</h1>
 </div>
+<p class="page-note">
+  Editing changes where <code>/go/{{ link.slug }}</code> sends people. The
+  click history stays with the link.
+</p>
 
 <section class="card">
   <form method="post" class="add-form add-form-column">
@@ -14,12 +18,12 @@
     </div>
     <div class="field grow">
       <label for="url">Destination URL</label>
-      <input id="url" name="url" required value="{{ link.url }}">
+      <input id="url" name="url" required class="input-mono" value="{{ link.url }}">
     </div>
     <div class="field">
       <label for="slug">Short name
         <span class="hint">changing it breaks links people already saved</span></label>
-      <input id="slug" name="slug" value="{{ link.slug }}">
+      <input id="slug" name="slug" class="input-mono" value="{{ link.slug }}">
     </div>
     <div class="actions">
       <button class="btn btn-primary" type="submit">Save changes</button>

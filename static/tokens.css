@@ -1,0 +1,128 @@
+/* Link Watch — design tokens.
+   Mission control: a lit atmospheric field, glass slabs with real
+   thickness, one light source from the top-left. Everything below is a
+   value only — no component ever hard-codes a colour or a shadow.
+   Fonts ship with Windows: this box has no internet, nothing is fetched. */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- the field the slabs float on ------------------------------- */
+  --bg:        #E7ECF7;
+  --field-1:   rgba(99, 102, 241, 0.20);
+  --field-2:   rgba(34, 211, 238, 0.16);
+  --field-3:   rgba(139, 92, 246, 0.12);
+  --grid-line: rgba(15, 23, 42, 0.04);
+
+  /* --- slabs ------------------------------------------------------- */
+  --surface:       rgba(255, 255, 255, 0.86);
+  --surface-solid: #FFFFFF;
+  --surface-2:     rgba(241, 245, 253, 0.92);
+  --edge:          rgba(15, 23, 42, 0.10);
+  --edge-strong:   rgba(15, 23, 42, 0.20);
+  --gloss:         rgba(255, 255, 255, 0.95);   /* lit top edge */
+  --underside:     rgba(15, 23, 42, 0.09);      /* the slab's thickness */
+
+  /* --- ink (ink-4 is decorative only: too light for text) ---------- */
+  --ink:   #0B1220;
+  --ink-2: #44516A;
+  --ink-3: #64748B;
+  --ink-4: #97A3B8;
+
+  /* --- accent ------------------------------------------------------ */
+  --accent:      #4F46E5;
+  --accent-2:    #0E7490;
+  --accent-hi:   #22D3EE;
+  --accent-ink:  #FFFFFF;
+  --accent-soft: rgba(99, 102, 241, 0.12);
+  --accent-glow: rgba(79, 70, 229, 0.40);
+  --grad-accent: linear-gradient(135deg, #6366F1 0%, #4F46E5 45%, #0EA5B7 100%);
+  --grad-slab:   linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.62));
+
+  /* --- status ------------------------------------------------------ */
+  --ok:       #047857;
+  --ok-soft:  rgba(4, 120, 87, 0.10);
+  --ok-glow:  rgba(16, 185, 129, 0.45);
+  --bad:      #DC2626;
+  --bad-soft: rgba(220, 38, 38, 0.09);
+  --bad-glow: rgba(239, 68, 68, 0.45);
+  --track:    rgba(15, 23, 42, 0.10);           /* unfilled dial arc */
+
+  /* --- command bar: dark in BOTH themes, it anchors the brand ------ */
+  --bar-grad:   linear-gradient(180deg, #141E36 0%, #0B1322 100%);
+  --bar-ink:    #F1F5FF;
+  --bar-ink-2:  #94A3C4;
+  --bar-line:   rgba(255, 255, 255, 0.09);
+  --bar-active: rgba(255, 255, 255, 0.11);
+
+  /* --- extruded chart columns: three lit faces --------------------- */
+  --col-face: #4F46E5;  --col-top: #818CF8;  --col-side: #3730A3;
+  --col-t-face: #0891B2; --col-t-top: #22D3EE; --col-t-side: #0E5A6E;
+  --col-zero: rgba(15, 23, 42, 0.13);
+
+  /* --- type -------------------------------------------------------- */
+  --sans: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /* --- space (4px base) -------------------------------------------- */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s7: 32px; --s8: 44px;
+
+  /* --- shape -------------------------------------------------------- */
+  --r-sm: 8px; --r-md: 10px; --r-lg: 16px; --r-xl: 22px; --r-pill: 999px;
+
+  /* --- elevation: contact shadow + ambient + the lit top edge ------ */
+  --e1: 0 1px 1px rgba(15,23,42,.05), 0 3px 8px rgba(15,23,42,.07);
+  --e2: 0 1px 2px rgba(15,23,42,.06), 0 6px 16px rgba(15,23,42,.10),
+        0 14px 34px rgba(15,23,42,.08);
+  --e3: 0 2px 4px rgba(15,23,42,.07), 0 14px 30px rgba(15,23,42,.14),
+        0 30px 64px rgba(15,23,42,.11);
+  --lip:  inset 0 1px 0 var(--gloss);
+  --ring: 0 0 0 3px var(--accent-glow);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:        #060A14;
+    --field-1:   rgba(99, 102, 241, 0.26);
+    --field-2:   rgba(34, 211, 238, 0.16);
+    --field-3:   rgba(139, 92, 246, 0.16);
+    --grid-line: rgba(255, 255, 255, 0.035);
+
+    --surface:       rgba(24, 33, 54, 0.78);
+    --surface-solid: #182136;
+    --surface-2:     rgba(31, 42, 66, 0.85);
+    --edge:          rgba(255, 255, 255, 0.10);
+    --edge-strong:   rgba(255, 255, 255, 0.20);
+    --gloss:         rgba(255, 255, 255, 0.13);
+    --underside:     rgba(0, 0, 0, 0.55);
+
+    --ink:   #EAEFFB;
+    --ink-2: #AEBAD3;
+    --ink-3: #8D9BB6;
+    --ink-4: #6B7A96;
+
+    --accent:      #818CF8;
+    --accent-2:    #22D3EE;
+    --accent-ink:  #0A1020;
+    --accent-soft: rgba(129, 140, 248, 0.16);
+    --accent-glow: rgba(129, 140, 248, 0.45);
+    --grad-slab:   linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0));
+
+    --ok:       #34D399;
+    --ok-soft:  rgba(52, 211, 153, 0.14);
+    --bad:      #F87171;
+    --bad-soft: rgba(248, 113, 113, 0.14);
+    --track:    rgba(255, 255, 255, 0.11);
+
+    --bar-grad: linear-gradient(180deg, #1B2540 0%, #131C31 100%);
+
+    --col-face: #6366F1;  --col-top: #A5B4FC;  --col-side: #312E81;
+    --col-t-face: #06B6D4; --col-t-top: #67E8F9; --col-t-side: #0B4A5C;
+    --col-zero: rgba(255, 255, 255, 0.10);
+
+    --e1: 0 1px 2px rgba(0,0,0,.5), 0 3px 10px rgba(0,0,0,.4);
+    --e2: 0 2px 6px rgba(0,0,0,.55), 0 10px 26px rgba(0,0,0,.5);
+    --e3: 0 4px 10px rgba(0,0,0,.6), 0 18px 44px rgba(0,0,0,.6);
+  }
+}
