@@ -375,6 +375,10 @@
   color: var(--accent-ink);
 }
 .view-toggle .count-bad { background: var(--bad-soft); color: var(--bad); }
+/* Solid fill, not the usual --bad-soft + --bad pairing: this badge sits on
+   var(--grad-accent), and a 9%-alpha fill would not occlude it. --bad has
+   no alpha so it covers the gradient; --accent-ink flips light/dark so the
+   text stays readable on top of it either way. */
 .view-toggle a.active .count-bad {
-  background: var(--bad); color: #FFFFFF;
+  background: var(--bad); color: var(--accent-ink);
 }

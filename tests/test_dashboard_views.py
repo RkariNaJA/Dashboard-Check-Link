@@ -1,6 +1,7 @@
 """The Links | Jobs toggle, and what each view shows."""
 import datetime
 import os
+import re
 import sys
 
 import pytest
@@ -59,10 +60,18 @@ def test_a_run_older_than_the_schedule_reads_as_overdue(client, temp_db):
     assert "Overdue" in page
 
 
-def test_both_counts_show_on_the_toggle_whichever_view_is_open(client):
+def test_both_counts_show_on_the_toggle_whichever_view_is_open(client, temp_db):
+    """The toggle reports both tallies, not just the one you are looking at."""
+    with temp_db.get_conn() as conn:
+        conn.executemany(
+            "INSERT INTO links (name, slug, url) VALUES (?, ?, ?)",
+            [("A", "a", "http://127.0.0.1:9/"),
+             ("B", "b", "http://127.0.0.1:9/")])
+
     page = client.get("/").get_data(as_text=True)
 
-    assert "view=jobs" in page
+    assert re.search(r'Links <span class="count">2</span>', page)
+    assert re.search(r'Jobs <span class="count">1</span>', page)
 
 
 # ------------------------------------------------------------- the filters
