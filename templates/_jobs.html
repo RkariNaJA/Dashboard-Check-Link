@@ -1,0 +1,96 @@
+{# The jobs view. Reuses the links view's status pills so a red pill means
+   the same thing on both: this needs looking at. #}
+<div class="page-head">
+  <div>
+    <h1>Scheduled jobs</h1>
+    <p class="page-note">
+      Jobs report in when they finish - this dashboard never contacts
+      their machines. A job that stops running goes Overdue on its own.
+    </p>
+  </div>
+</div>
+
+<div class="stat-band">
+  <div class="stat">
+    <div class="stat-label">Jobs watched</div>
+    <div class="stat-value">{{ job_summary.total }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Passing</div>
+    <div class="stat-value ok-text">{{ job_summary.ok }}</div>
+  </div>
+  <div class="stat {{ 'stat-alert' if job_summary.failed }}">
+    <div class="stat-label">Failed</div>
+    <div class="stat-value {{ 'bad-text' if job_summary.failed else '' }}">{{ job_summary.failed }}</div>
+  </div>
+  <div class="stat {{ 'stat-alert' if job_summary.overdue }}">
+    <div class="stat-label">Overdue</div>
+    <div class="stat-value {{ 'bad-text' if job_summary.overdue else '' }}">{{ job_summary.overdue }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Reports in 24 h</div>
+    <div class="stat-value">{{ job_summary.runs_24h }}</div>
+  </div>
+</div>
+
+{% if job_rows %}
+<div class="table-wrap">
+<table class="links-table">
+  <thead>
+    <tr>
+      <th>Job</th>
+      <th>Status</th>
+      <th>Last run</th>
+      <th class="num">Took</th>
+      <th>Next expected</th>
+      <th class="num">Exit</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in job_rows %}
+    <tr>
+      <td class="cell-link">
+        <div class="link-name">
+          <a href="{{ url_for('job_detail', slug=r.job.slug) }}">{{ r.job.name }}</a>
+        </div>
+        <div class="short-link">{{ r.job.slug }}</div>
+        {% if r.job.host %}<div class="link-url">on {{ r.job.host }}</div>{% endif %}
+      </td>
+      <td data-label="Status">
+        {% if r.status == 'ok' %}
+          <span class="status status-ok"><span class="dot"></span>Passing</span>
+        {% elif r.status == 'failed' %}
+          <span class="status status-bad"><span class="dot"></span>Failed</span>
+        {% elif r.status == 'overdue' %}
+          <span class="status status-bad"><span class="dot"></span>Overdue</span>
+        {% else %}
+          <span class="status status-off"><span class="dot"></span>Waiting for first report</span>
+        {% endif %}
+      </td>
+      <td data-label="Last run">
+        {{ r.run["started_at"] | ago if r.run else "never" }}
+        {% if r.run %}<div class="dim">{{ r.run["started_at"][5:16] }}</div>{% endif %}
+      </td>
+      <td class="num" data-label="Took">
+        {% if r.run %}{{ r.run["duration_ms"] | duration }}{% else %}&mdash;{% endif %}
+      </td>
+      <td data-label="Next expected">
+        {% if r.next_expected %}
+          {{ r.next_expected.strftime('%m-%d %H:%M') }}
+        {% else %}<span class="dim">unknown</span>{% endif %}
+      </td>
+      <td class="num" data-label="Exit">
+        {% if r.run %}{{ r.run["exit_code"] }}{% else %}&mdash;{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty">
+  <p>No jobs configured yet. Add a <code>[job:&lt;slug&gt;]</code> section to
+     <code>config.ini</code> on this server, then point that job's Scheduled
+     Task at <code>report.py</code>.</p>
+</div>
+{% endif %}

@@ -328,3 +328,53 @@
   .stat-band { grid-template-columns: minmax(0, 1fr); }
   .stat-value { font-size: 32px; }
 }
+
+/* ---- Links | Jobs toggle -------------------------------------------- */
+/* A pressed-in track with one raised, lit tab - the same slab language
+   as the stat tiles, so the page still reads as one object. */
+.view-toggle {
+  display: inline-flex;
+  gap: var(--s1);
+  margin-bottom: var(--s5);
+  padding: var(--s1);
+  background: var(--surface-2);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 1px 3px var(--underside);
+}
+.view-toggle a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 7px var(--s4);
+  border-radius: var(--r-pill);
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink-3);
+  text-decoration: none;
+  transition: color .15s ease, background .15s ease;
+}
+.view-toggle a:hover { color: var(--ink); }
+.view-toggle a.active {
+  color: var(--accent-ink);
+  background: var(--grad-accent);
+  box-shadow: var(--e1), var(--lip);
+}
+.view-toggle .count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.view-toggle a.active .count {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--accent-ink);
+}
+.view-toggle .count-bad { background: var(--bad-soft); color: var(--bad); }
+.view-toggle a.active .count-bad {
+  background: var(--bad); color: #FFFFFF;
+}

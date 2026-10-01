@@ -61,6 +61,34 @@ def unique_slug(conn, wanted, ignore_id=None):
         slug = f"{wanted}-{n}"
 
 
+# ------------------------------------------------------- display helpers
+
+@app.template_filter("ago")
+def ago(stamp):
+    """'2 h ago'. Absolute times in a table are hard to scan at a glance."""
+    if not stamp:
+        return "never"
+    seconds = (datetime.now()
+               - datetime.strptime(stamp, TIMESTAMP_FORMAT)).total_seconds()
+    if seconds < 90:
+        return "just now"
+    if seconds < 5400:
+        return f"{int(seconds // 60)} min ago"
+    if seconds < 172800:
+        return f"{int(seconds // 3600)} h ago"
+    return f"{int(seconds // 86400)} d ago"
+
+
+@app.template_filter("duration")
+def duration(ms):
+    if ms is None:
+        return "—"
+    seconds = int(ms) // 1000
+    if seconds < 60:
+        return f"{seconds}s"
+    return f"{seconds // 60}m {seconds % 60:02d}s"
+
+
 # ------------------------------------------------------------------ queries
 
 def load_dashboard_rows():
@@ -139,9 +167,15 @@ def go(slug):
 
 @app.route("/")
 def dashboard():
+    """Links and jobs share one page - two views of the same question."""
+    view = "jobs" if request.args.get("view") == "jobs" else "links"
     rows = load_dashboard_rows()
-    return render_template("dashboard.html", rows=rows,
-                           summary=summary_of(rows),
+    job_rows = jobs.build_rows(JOBS, db.latest_job_runs(), datetime.now())
+    return render_template("dashboard.html", view=view,
+                           rows=rows, summary=summary_of(rows),
+                           job_rows=job_rows,
+                           job_summary=jobs.summarize(job_rows,
+                                                      db.job_runs_since(24)),
                            check_interval=CHECK_MIN)
 
 
@@ -339,6 +373,12 @@ def report_job_run(slug):
                       str(payload.get("host", ""))[:100],
                       str(payload.get("output_tail", ""))[-MAX_OUTPUT_TAIL:])
     return {"ok": True}, 201
+
+
+@app.route("/jobs/<slug>")
+def job_detail(slug):
+    """Run history for one job. Filled in by the next task."""
+    return redirect(url_for("dashboard", view="jobs"))
 
 
 @app.route("/refresh", methods=["POST"])

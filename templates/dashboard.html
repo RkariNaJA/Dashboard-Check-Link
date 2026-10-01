@@ -3,6 +3,21 @@
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block content %}
 
+{# One page, two questions: is the web app up, and did the batch job run. #}
+<nav class="view-toggle">
+  <a href="{{ url_for('dashboard') }}"
+     class="{{ 'active' if view == 'links' }}">
+    Links <span class="count">{{ summary.total }}</span></a>
+  <a href="{{ url_for('dashboard', view='jobs') }}"
+     class="{{ 'active' if view == 'jobs' }}">
+    Jobs <span class="count">{{ job_summary.total }}</span>
+    {%- if job_summary.overdue or job_summary.failed %}
+    <span class="count count-bad">{{ job_summary.overdue + job_summary.failed }}</span>
+    {%- endif %}</a>
+</nav>
+
+{% if view == 'jobs' %}{% include "_jobs.html" %}{% else %}
+
 {% set pct = (summary.online * 100 // summary.total) if summary.total else 0 %}
 
 <div class="page-head">
@@ -161,6 +176,8 @@
   <p>No links yet. Add your first internal link on the
      <a href="{{ url_for('manage') }}">Manage links</a> page.</p>
 </div>
+{% endif %}
+
 {% endif %}
 
 {% endblock %}
