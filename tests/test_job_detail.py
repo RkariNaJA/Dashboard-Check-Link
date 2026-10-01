@@ -47,12 +47,15 @@ def test_shows_the_captured_output_of_the_latest_run(client, temp_db):
 
 def test_lists_runs_newest_first(client, temp_db):
     now = datetime.datetime.now()
-    record(temp_db, now - datetime.timedelta(days=2), output="older run")
-    record(temp_db, now, output="newer run")
+    older = now - datetime.timedelta(days=2)
+    record(temp_db, older)
+    record(temp_db, now)
 
     page = client.get("/jobs/flow4").get_data(as_text=True)
 
-    assert page.index("newer run") < page.index("older run")
+    newer_stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    older_stamp = older.strftime("%Y-%m-%d %H:%M:%S")
+    assert page.index(newer_stamp) < page.index(older_stamp)
 
 
 def test_a_job_that_has_never_run_still_renders(client):
@@ -76,3 +79,12 @@ def test_thai_and_emoji_in_the_output_render(client, temp_db):
     page = client.get("/jobs/flow4").get_data(as_text=True)
 
     assert "เริ่มรัน" in page
+
+
+def test_a_run_with_no_captured_output_still_renders(client, temp_db):
+    record(temp_db, datetime.datetime.now(), output="")
+
+    response = client.get("/jobs/flow4")
+
+    assert response.status_code == 200
+    assert "the job printed nothing" in response.get_data(as_text=True)

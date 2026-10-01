@@ -35,12 +35,10 @@
       <th class="num">Took</th>
       <th>Host</th>
       <th>Reported</th>
-      <th>Output</th>
     </tr>
   </thead>
   <tbody>
   {% for run in runs %}
-    {% set first_line = run["output_tail"].splitlines()[0] if run["output_tail"] else "" %}
     <tr>
       <td data-label="Started">
         {{ run["started_at"] }}
@@ -56,7 +54,6 @@
       <td class="num" data-label="Took">{{ run["duration_ms"] | duration }}</td>
       <td class="dim" data-label="Host">{% if run["host"] %}{{ run["host"] }}{% else %}&mdash;{% endif %}</td>
       <td class="dim" data-label="Reported">{{ run["received_at"][5:16] }}</td>
-      <td class="dim" data-label="Output">{{ first_line | truncate(60) }}</td>
     </tr>
   {% endfor %}
   </tbody>
