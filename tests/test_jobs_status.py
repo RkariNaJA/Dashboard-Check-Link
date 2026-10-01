@@ -47,6 +47,11 @@ def test_just_past_the_grace_window_it_is_overdue():
     assert jobs.derive_status(DAILY, run(25.1), NOW) == jobs.STATUS_OVERDUE
 
 
+def test_exactly_at_the_grace_boundary_is_not_yet_overdue():
+    """Pins `>` rather than `>=`: a job is late only once it is PAST its grace."""
+    assert jobs.derive_status(DAILY, run(25), NOW) == jobs.STATUS_OK
+
+
 def test_next_expected_is_one_interval_after_the_last_start():
     assert jobs.next_expected(DAILY, run(2)) == NOW + datetime.timedelta(hours=22)
 
