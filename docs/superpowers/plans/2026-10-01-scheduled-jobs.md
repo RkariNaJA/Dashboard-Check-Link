@@ -2003,6 +2003,13 @@ work is not considered finished at the last commit.
 
    Set it to **"Run only when user is logged on"** under `<user>`. `refresh_Excel.py` drives Excel through `win32com`, and "run whether user is logged on or not" executes in session 0 where Excel COM fails.
 
+   **"Start in" is mandatory, not optional.** The wrapper writes
+   `report_errors.log` to its working directory. A Scheduled Task with a blank
+   "Start in" runs with a working directory of `C:\Windows\System32`, where a
+   service account cannot write — the wrapper swallows that failure by design and
+   falls back to stderr, which Task Scheduler discards. A failed report would then
+   leave no trace anywhere, and step 5 below would have nothing to find.
+
 5. Run the task by hand once and confirm the report lands on the dashboard. If it does not, look for `report_errors.log` in the task's *Start in* folder.
 6. For each remaining scheduled project: add a `[job:<slug>]` section to `config.ini` on .92, repeat steps 2 and 4 on that project's host, and confirm its exit code is honest.
 
