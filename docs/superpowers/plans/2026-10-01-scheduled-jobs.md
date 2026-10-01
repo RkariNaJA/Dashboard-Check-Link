@@ -1260,6 +1260,17 @@ def report_with_retries(url, slug, token, run, log_path):
 
 
 def main(argv=None):
+    # argparse.REMAINDER does not mix with a required option placed before
+    # it (the remainder swallows "--url" instead of leaving it to be
+    # parsed), so the split is done by hand: everything after the first
+    # "--" is the command, argparse only ever sees what comes before it.
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--" in argv:
+        split = argv.index("--")
+        head, command = argv[:split], argv[split + 1:]
+    else:
+        head, command = argv, []
+
     parser = argparse.ArgumentParser(
         description="Run a job and report the result to the dashboard.")
     parser.add_argument("slug", help="matches a [job:<slug>] section")
@@ -1267,11 +1278,8 @@ def main(argv=None):
                         help="dashboard root, e.g. http://192.0.2.10:8090")
     parser.add_argument("--token", default="",
                         help="must match [jobs] token on the dashboard")
-    parser.add_argument("command", nargs=argparse.REMAINDER,
-                        help="-- followed by the command to run")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(head)
 
-    command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("no command given - put it after --")
 
