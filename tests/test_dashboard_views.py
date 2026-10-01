@@ -28,6 +28,21 @@ def test_the_default_view_is_links(client):
     assert "Clicks today" in page
 
 
+def test_the_links_view_survives_a_job_run_with_a_bad_started_at(client,
+                                                                 temp_db):
+    """The links view has nothing to do with jobs, but dashboard() builds
+    job rows on every load (the toggle needs job_summary.total). A row
+    that did not come through ingest - here, written straight to the
+    table the way a restore or a future direct caller might - must not
+    be able to take the links view down with it."""
+    temp_db.record_job_run("flow4", "not-a-timestamp", "not-a-timestamp",
+                           1000, 0, "SRV", "fine")
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+
 def test_the_jobs_view_lists_configured_jobs(client):
     page = client.get("/?view=jobs").get_data(as_text=True)
 

@@ -78,8 +78,17 @@ STAMP = "%Y-%m-%d %H:%M:%S"
 
 
 def _started(run):
-    """When this run began. Ingest validates the format, so this is safe."""
-    return datetime.datetime.strptime(run["started_at"], STAMP)
+    """When this run began, or None if started_at will not parse.
+
+    Ingest still validates the format - this is defence for rows that
+    did not come through ingest at all (a hand-edited or restored
+    database, a future direct db.record_job_run caller, the status_file
+    pull mode the spec defers to later).
+    """
+    try:
+        return datetime.datetime.strptime(run["started_at"], STAMP)
+    except (ValueError, TypeError):
+        return None
 
 
 def derive_status(job, run, now):
@@ -91,7 +100,10 @@ def derive_status(job, run, now):
     """
     if run is None:
         return STATUS_NEVER
-    late_by = (now - _started(run)).total_seconds()
+    started = _started(run)
+    if started is None:
+        return STATUS_NEVER
+    late_by = (now - started).total_seconds()
     if late_by > job.expect_every + job.grace:
         return STATUS_OVERDUE
     return STATUS_OK if run["ok"] else STATUS_FAILED
@@ -101,7 +113,10 @@ def next_expected(job, run):
     """When this job should next be heard from, or None before its first."""
     if run is None:
         return None
-    return _started(run) + datetime.timedelta(seconds=job.expect_every)
+    started = _started(run)
+    if started is None:
+        return None
+    return started + datetime.timedelta(seconds=job.expect_every)
 
 
 def build_rows(loaded_jobs, latest, now):

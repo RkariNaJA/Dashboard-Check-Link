@@ -20,6 +20,17 @@ def test_a_job_that_has_never_reported_is_never():
     assert jobs.derive_status(DAILY, None, NOW) == jobs.STATUS_NEVER
 
 
+def test_a_run_with_an_unparseable_started_at_reads_as_never():
+    """Ingest validates started_at, so this can only reach derive_status
+    through a row that did not come through ingest - a hand-edited or
+    restored database, say. That should not be able to crash the whole
+    jobs view, let alone the links view that happens to share a page
+    with it."""
+    bad_run = {"started_at": "not-a-timestamp", "ok": 1}
+
+    assert jobs.derive_status(DAILY, bad_run, NOW) == jobs.STATUS_NEVER
+
+
 def test_a_recent_successful_run_is_ok():
     assert jobs.derive_status(DAILY, run(2), NOW) == jobs.STATUS_OK
 
