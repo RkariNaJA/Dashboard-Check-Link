@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ job.name }} · Link Watch{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>{{ job.name }}</h1>
+    <p class="page-note">
+      <code>{{ job.slug }}</code>
+      {%- if job.host %} &middot; runs on {{ job.host }}{% endif %}
+      &middot; expected every {{ (job.expect_every // 3600) }} h
+    </p>
+  </div>
+  <div class="actions">
+    {% if status == 'ok' %}
+      <span class="status status-ok"><span class="dot"></span>Passing</span>
+    {% elif status == 'failed' %}
+      <span class="status status-bad"><span class="dot"></span>Failed</span>
+    {% elif status == 'overdue' %}
+      <span class="status status-bad"><span class="dot"></span>Overdue</span>
+    {% else %}
+      <span class="status status-off"><span class="dot"></span>Waiting for first report</span>
+    {% endif %}
+    <a class="btn" href="{{ url_for('dashboard', view='jobs') }}">All jobs</a>
+  </div>
+</div>
+
+{% if runs %}
+<div class="table-wrap">
+<table class="links-table">
+  <thead>
+    <tr>
+      <th>Started</th>
+      <th>Result</th>
+      <th class="num">Took</th>
+      <th>Host</th>
+      <th>Reported</th>
+      <th>Output</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for run in runs %}
+    {% set first_line = run["output_tail"].splitlines()[0] if run["output_tail"] else "" %}
+    <tr>
+      <td data-label="Started">
+        {{ run["started_at"] }}
+        <div class="dim">{{ run["started_at"] | ago }}</div>
+      </td>
+      <td data-label="Result">
+        {% if run["ok"] %}
+          <span class="status status-ok"><span class="dot"></span>Passed</span>
+        {% else %}
+          <span class="status status-bad"><span class="dot"></span>Exit {{ run["exit_code"] }}</span>
+        {% endif %}
+      </td>
+      <td class="num" data-label="Took">{{ run["duration_ms"] | duration }}</td>
+      <td class="dim" data-label="Host">{% if run["host"] %}{{ run["host"] }}{% else %}&mdash;{% endif %}</td>
+      <td class="dim" data-label="Reported">{{ run["received_at"][5:16] }}</td>
+      <td class="dim" data-label="Output">{{ first_line | truncate(60) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{# The latest run's output, which is the reason not to remote in. #}
+<h2 class="section-head">What it printed &middot; {{ runs[0]["started_at"] }}</h2>
+<pre class="job-output">{{ runs[0]["output_tail"] or "(the job printed nothing)" }}</pre>
+
+{% else %}
+<div class="empty">
+  <p>No runs reported yet. Point this job's Scheduled Task at
+     <code>report.py</code> and it will appear here after its next run.</p>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -377,8 +377,22 @@ def report_job_run(slug):
 
 @app.route("/jobs/<slug>")
 def job_detail(slug):
-    """Run history for one job. Filled in by the next task."""
-    return redirect(url_for("dashboard", view="jobs"))
+    """Run history and captured output for one job.
+
+    This page is the point of the whole feature: when a nightly job fails
+    you read what it printed here, instead of remoting into its server to
+    find a log file on somebody's Desktop.
+    """
+    job = JOBS.get(slug)
+    if job is None:
+        flash(f"No job named '{slug}' is configured on this dashboard.",
+              "error")
+        return redirect(url_for("dashboard", view="jobs"))
+    runs = db.recent_job_runs(slug, limit=20)
+    return render_template(
+        "job_detail.html", job=job, runs=runs,
+        status=jobs.derive_status(job, runs[0] if runs else None,
+                                  datetime.now()))
 
 
 @app.route("/refresh", methods=["POST"])
