@@ -6,9 +6,12 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reporter"))
 
 import app as app_module
 import jobs
+import report
 
 GOOD = {
     "started_at": "2026-10-01 06:00:03",
@@ -98,6 +101,36 @@ def test_a_very_long_output_is_trimmed_from_the_front(client, temp_db):
 
     assert stored.endswith("THE ERROR")
     assert len(stored) == app_module.MAX_OUTPUT_TAIL
+
+
+# ---------------------------------------------------- the real wire contract
+
+def test_the_wrappers_real_payload_is_accepted_and_stored(client, temp_db):
+    """test_reporter.py posts to a stub collector that accepts anything;
+    the tests above post a hand-written GOOD dict. Each half of the only
+    contract that matters is otherwise tested against a fixture of its
+    own making - a field rename or type change on either side could
+    leave every test green while every job on every server starts
+    reporting nothing, which looks exactly like "overdue", which is also
+    what a working job looks like when the dashboard itself is down.
+
+    This test runs a real child, builds the real payload the wrapper
+    sends, and POSTs it through the real Flask test client.
+    """
+    run = report.run_job([sys.executable, "-c", "print('fine')"])
+    payload = report.build_payload(run)
+
+    response = post(client, payload)
+
+    # the field types and names match what the endpoint requires
+    assert response.status_code == 201
+    # a 201 with nothing stored would be a passing test over a broken feature
+    stored = temp_db.latest_job_runs()["flow4"]
+    assert stored["ok"] == 1
+    # output_tail passes through the most transformations of any field:
+    # captured bytes -> decode(errors="replace") -> [-TAIL_CHARS:] -> JSON
+    # -> str(...)[-MAX_OUTPUT_TAIL:] -> SQLite TEXT
+    assert "fine" in temp_db.recent_job_runs("flow4")[0]["output_tail"]
 
 
 # --------------------------------------------------------------- the token
