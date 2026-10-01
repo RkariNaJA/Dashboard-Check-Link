@@ -84,7 +84,13 @@ def note(log_path, message):
             log.write(line + "\n")
     except OSError:
         pass            # even logging must not be able to break the job
-    sys.stderr.write("[report] " + message + "\n")
+    # same guarantee for stderr: a broken pipe, or a cp874 console choking
+    # on non-ASCII text from str(exc), must not be able to raise out of
+    # here either - there is no exception class worth crashing the job for
+    try:
+        sys.stderr.write("[report] " + message + "\n")
+    except Exception:
+        pass
 
 
 def report_with_retries(url, slug, token, run, log_path):
@@ -136,9 +142,17 @@ def main(argv=None):
                         os.path.join(os.getcwd(), ERROR_LOG))
 
     # pass the job's own output through, as bytes: re-encoding it for a
-    # cp874 console is exactly the crash we told the child to avoid
-    sys.stdout.buffer.write(run.output.encode("utf-8", errors="replace"))
-    sys.stdout.buffer.flush()
+    # cp874 console is exactly the crash we told the child to avoid.
+    # Echoing it is a courtesy, though, not the job - a closed or broken
+    # pipe here (Task Scheduler piping into something that exits early)
+    # must not be able to turn a good run's exit code into a traceback's.
+    # There is no exception class we would rather crash on, hence the
+    # blanket catch.
+    try:
+        sys.stdout.buffer.write(run.output.encode("utf-8", errors="replace"))
+        sys.stdout.buffer.flush()
+    except Exception:
+        pass
     return run.exit_code
 
 

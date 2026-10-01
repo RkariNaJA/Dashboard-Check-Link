@@ -137,3 +137,46 @@ def test_main_still_exits_with_the_childs_code_when_reporting_fails(tmp_path,
 def test_main_needs_a_command_after_the_separator():
     with pytest.raises(SystemExit):
         report.main(["flow4", "--url", "http://127.0.0.1:9"])
+
+
+def test_the_childs_own_flags_and_separator_survive_the_split(collector):
+    """The wrapper consumes only the FIRST --; the child keeps the rest.
+
+    Pins the hand-rolled argv split (the fix for the argparse.REMAINDER
+    bug) against a later refactor silently eating too much or too little.
+    """
+    url, _ = collector
+    # everything from here on is the job's own command line, including a
+    # second "--" and tokens that look exactly like the wrapper's own
+    # flags - none of it belongs to the wrapper.
+    child_args = ["--", "--url", "nope", "subcommand", "--token", "ignored"]
+    code = "import sys; sys.exit(len(sys.argv) - 1)"
+
+    exit_code = report.main(["flow4", "--url", url, "--",
+                             sys.executable, "-c", code, *child_args])
+
+    assert exit_code == len(child_args)
+
+
+def test_main_returns_the_childs_code_even_if_stdout_is_broken(monkeypatch,
+                                                                collector):
+    """Echoing the job's output is a courtesy; it must not be able to
+    change the exit code if the pipe underneath it is already gone."""
+    url, _ = collector
+
+    class BrokenBuffer:
+        def write(self, data):
+            raise BrokenPipeError("broken pipe")
+
+        def flush(self):
+            raise BrokenPipeError("broken pipe")
+
+    class FakeStdout:
+        buffer = BrokenBuffer()
+
+    monkeypatch.setattr(sys, "stdout", FakeStdout())
+
+    code = report.main(["flow4", "--url", url, "--",
+                        sys.executable, "-c", "import sys; sys.exit(5)"])
+
+    assert code == 5
