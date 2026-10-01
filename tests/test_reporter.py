@@ -134,6 +134,21 @@ def test_main_still_exits_with_the_childs_code_when_reporting_fails(tmp_path,
     assert code == 0
 
 
+def test_main_exits_with_the_childs_code_when_the_url_is_not_http(tmp_path,
+                                                                   monkeypatch):
+    """A non-numeric port raises http.client.InvalidURL, which subclasses
+    HTTPException - not OSError - and so slips past a catch tuple of
+    (URLError, OSError, ValueError). Pointing at a non-HTTP listener (a
+    hand-rolled rollout's likeliest mistake) raises just as raw through
+    h.getresponse(), outside urllib's OSError -> URLError wrapping."""
+    monkeypatch.chdir(tmp_path)
+
+    code = report.main(["flow4", "--url", "http://127.0.0.1:notaport", "--",
+                        sys.executable, "-c", "import sys; sys.exit(9)"])
+
+    assert code == 9
+
+
 def test_main_needs_a_command_after_the_separator():
     with pytest.raises(SystemExit):
         report.main(["flow4", "--url", "http://127.0.0.1:9"])

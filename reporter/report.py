@@ -57,16 +57,21 @@ def run_job(command):
                int((time.perf_counter() - clock) * 1000))
 
 
-def post_report(url, slug, token, run):
-    """POST one run to the dashboard. Raises if it does not land."""
-    payload = json.dumps({
+def build_payload(run):
+    """The wire contract, as a named thing both sides can be read against."""
+    return {
         "started_at": run.started.strftime(STAMP),
         "finished_at": run.finished.strftime(STAMP),
         "duration_ms": run.duration_ms,
         "exit_code": run.exit_code,
         "host": platform.node(),
         "output_tail": run.output[-TAIL_CHARS:],
-    }).encode("utf-8")
+    }
+
+
+def post_report(url, slug, token, run):
+    """POST one run to the dashboard. Raises if it does not land."""
+    payload = json.dumps(build_payload(run)).encode("utf-8")
     request = urllib.request.Request(
         f"{url.rstrip('/')}/jobs/{slug}/report", data=payload, method="POST")
     request.add_header("Content-Type", "application/json; charset=utf-8")
@@ -105,8 +110,8 @@ def report_with_retries(url, slug, token, run, log_path):
         try:
             post_report(url, slug, token, run)
             return True
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            problem = exc
+        except Exception as exc:          # same reasoning as note(): there is no
+            problem = exc                 # exception class worth crashing the job for
             if attempt < ATTEMPTS:
                 time.sleep(RETRY_SECONDS)
     note(log_path, f"{slug}: could not report after {ATTEMPTS} tries: {problem}")
