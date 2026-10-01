@@ -5,6 +5,7 @@ start buttons are. Nothing here reaches out to a job's machine - jobs
 report in to the dashboard, so a job we never hear from is simply late.
 """
 import collections
+import datetime
 import re
 
 Job = collections.namedtuple("Job", "slug name expect_every grace host")
@@ -66,3 +67,64 @@ def load_jobs(config):
             host=config.get(section, "host", fallback="").strip(),
         )
     return loaded
+
+
+STATUS_NEVER = "never"
+STATUS_OVERDUE = "overdue"
+STATUS_FAILED = "failed"
+STATUS_OK = "ok"
+
+STAMP = "%Y-%m-%d %H:%M:%S"
+
+
+def _started(run):
+    """When this run began. Ingest validates the format, so this is safe."""
+    return datetime.datetime.strptime(run["started_at"], STAMP)
+
+
+def derive_status(job, run, now):
+    """never -> overdue -> failed -> ok.
+
+    Overdue outranks failed on purpose: a job that failed last night and
+    has not run since has two problems, and the one you cannot see by
+    reading its log is that it stopped running at all.
+    """
+    if run is None:
+        return STATUS_NEVER
+    late_by = (now - _started(run)).total_seconds()
+    if late_by > job.expect_every + job.grace:
+        return STATUS_OVERDUE
+    return STATUS_OK if run["ok"] else STATUS_FAILED
+
+
+def next_expected(job, run):
+    """When this job should next be heard from, or None before its first."""
+    if run is None:
+        return None
+    return _started(run) + datetime.timedelta(seconds=job.expect_every)
+
+
+def build_rows(loaded_jobs, latest, now):
+    """One display row per configured job, in config order."""
+    rows = []
+    for job in loaded_jobs.values():
+        run = latest.get(job.slug)
+        rows.append({
+            "job": job,
+            "run": run,
+            "status": derive_status(job, run, now),
+            "next_expected": next_expected(job, run),
+        })
+    return rows
+
+
+def summarize(rows, runs_24h):
+    counts = collections.Counter(row["status"] for row in rows)
+    return {
+        "total": len(rows),
+        "ok": counts[STATUS_OK],
+        "failed": counts[STATUS_FAILED],
+        "overdue": counts[STATUS_OVERDUE],
+        "never": counts[STATUS_NEVER],
+        "runs_24h": runs_24h,
+    }
