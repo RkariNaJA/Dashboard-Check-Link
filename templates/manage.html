@@ -17,23 +17,23 @@
   <form method="post" action="{{ url_for('add_link') }}" class="add-form">
     <div class="field">
       <label for="name">Name</label>
-      <input id="name" name="name" required placeholder="HR Request Form">
+      <input id="name" name="name" required placeholder="Forming Box">
     </div>
     <div class="field grow">
       <label for="url">Destination URL <span class="hint">your real app</span></label>
       <input id="url" name="url" required class="input-mono"
-             placeholder="http://SERVERNAME:5000/">
+             placeholder="http://SERVERNAME:5174/">
     </div>
     <div class="field">
       <label for="slug">Short name
         <span class="hint">optional &middot; made from the name if empty</span></label>
-      <input id="slug" name="slug" class="input-mono" placeholder="hr-form">
+      <input id="slug" name="slug" class="input-mono" placeholder="forming-box">
     </div>
     <button class="btn btn-primary" type="submit">Add link</button>
   </form>
   <p class="page-note">
     Adding a link creates a <strong>short link</strong> like
-    <code>{{ request.url_root }}go/hr-form</code>. Share the short link with
+    <code>{{ request.url_root }}go/forming-box</code>. Share the short link with
     your users &mdash; every click is counted here, then the user is
     instantly forwarded to the destination.
   </p>

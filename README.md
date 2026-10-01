@@ -61,7 +61,7 @@ Then one row per link:
 
 | Column | Meaning |
 |---|---|
-| **Status** | 🟢 Online / 🔴 Down — checked every 5 minutes, with a **Start** button beside it when the app is down |
+| **Status** | 🟢 Online / 🔴 Down — rechecked on a timer (`check_interval_minutes`, 30 by default), with a **Start** button beside it when the app is down |
 | **Response** | how fast the link answered, in milliseconds, with a small meter beside the number |
 | **Today** | clicks today / how many different people today |
 | **Total** | all-time clicks / all-time different people |
@@ -119,6 +119,11 @@ The first run creates `data.db`, and with `sample_mode = true` in `config.ini` i
 demo links with fake click history so you can try everything safely. Set `sample_mode = false` on
 the real server.
 
+> **Setting `sample_mode = false` does not remove demo data that is already there.** The seeder
+> only skips when the database is empty, so demo links created by an earlier run stay in `data.db`
+> and keep showing on the dashboard. Delete them on the **Manage links** page (or start fresh by
+> deleting `data.db`) — the flag alone only stops *new* seeding.
+
 > The dashboard has to stay running for clicks to be counted — the short links are served by it.
 > On a server, start it automatically (Task Scheduler recipe in the guide).
 >
@@ -134,7 +139,7 @@ the real server.
 
 | | |
 |---|---|
-| **Built with** | Python + [Flask](https://flask.palletsprojects.com/) 3, SQLite (built in), [APScheduler](https://apscheduler.readthedocs.io/) for the 5-minute checks, [requests](https://requests.readthedocs.io/) for the pings, Jinja2 templates |
+| **Built with** | Python + [Flask](https://flask.palletsprojects.com/) 3, SQLite (built in), [APScheduler](https://apscheduler.readthedocs.io/) for the timed checks, [requests](https://requests.readthedocs.io/) for the pings, Jinja2 templates |
 | **The app** | [`app.py`](app.py) — pages, the `/go/<slug>` counting redirect, the scheduler |
 | **Health checks** | [`collector.py`](collector.py) — pings every link, saves status + response time |
 | **Start buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/` |
