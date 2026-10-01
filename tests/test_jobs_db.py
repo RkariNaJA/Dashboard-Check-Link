@@ -34,12 +34,16 @@ def test_latest_is_the_newest_start_time_not_the_newest_row(temp_db):
     """A late-arriving report for an older run must not win.
 
     Reports travel over the network and can arrive out of order; the run
-    the dashboard shows is the one that started most recently.
+    the dashboard shows is the one that started most recently. Bare columns
+    in the GROUP BY query must come from the max row, not an arbitrary row.
     """
     record(temp_db, started="2026-10-01 06:00:00", exit_code=0)
     record(temp_db, started="2026-09-30 06:00:00", exit_code=1)
 
-    assert temp_db.latest_job_runs()["flow4"]["started_at"] == "2026-10-01 06:00:00"
+    latest = temp_db.latest_job_runs()["flow4"]
+    assert latest["started_at"] == "2026-10-01 06:00:00"
+    assert latest["ok"] == 1  # bare column from max row (exit_code=0)
+    assert latest["exit_code"] == 0
 
 
 def test_recent_runs_are_newest_first_and_carry_the_output(temp_db):
