@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import (Flask, flash, redirect, render_template, request, url_for)
 
 import db
+import jobs
 import runner
 from collector import check_one_link, run_health_checks
 
@@ -23,12 +24,19 @@ SSL_VERIFY = config.getboolean("health", "ssl_verify", fallback=False)
 SAMPLE_MODE = config.getboolean("app", "sample_mode", fallback=False)
 HOST = config.get("server", "host", fallback="0.0.0.0")
 PORT = config.getint("server", "port", fallback=8090)
+JOBS = jobs.load_jobs(config)
+JOB_TOKEN = config.get("jobs", "token", fallback="").strip()
 
 app = Flask(__name__)
 app.secret_key = "internal-link-dashboard"
 
 TREND_DAYS = 14
-RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static", "services"}
+RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static", "services",
+                  "jobs"}
+
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+# the end of a log is where the error is, so long output is cut from the front
+MAX_OUTPUT_TAIL = 8000
 
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 # how long to let an app boot before asking whether it came up
@@ -290,6 +298,49 @@ def start_all():
     return redirect(url_for("dashboard"))
 
 
+# ------------------------------------------------- hearing back from jobs
+
+def _clean_stamp(value):
+    """Accept only 'YYYY-MM-DD HH:MM:SS'.
+
+    Validating here means every later reader - status, sorting, the
+    'overdue' maths - can parse without guarding. Raises ValueError.
+    """
+    text = str(value)
+    datetime.strptime(text, TIMESTAMP_FORMAT)
+    return text
+
+
+@app.route("/jobs/<slug>/report", methods=["POST"])
+def report_job_run(slug):
+    """A job's wrapper telling us how its run went.
+
+    An unknown slug is a 404 on purpose: a typo in a Scheduled Task should
+    fail loudly at the wrapper, not quietly become a job that waits for a
+    first report that will never come.
+    """
+    if JOB_TOKEN and request.headers.get("X-Job-Token", "") != JOB_TOKEN:
+        return {"error": "bad or missing X-Job-Token"}, 401
+    if slug not in JOBS:
+        return {"error": f"no [job:{slug}] section on this dashboard"}, 404
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return {"error": "expected a JSON object"}, 400
+    try:
+        started_at = _clean_stamp(payload["started_at"])
+        finished_at = _clean_stamp(payload["finished_at"])
+        duration_ms = int(payload["duration_ms"])
+        exit_code = int(payload["exit_code"])
+    except (KeyError, TypeError, ValueError) as exc:
+        return {"error": f"bad or missing field: {exc}"}, 400
+
+    db.record_job_run(slug, started_at, finished_at, duration_ms, exit_code,
+                      str(payload.get("host", ""))[:100],
+                      str(payload.get("output_tail", ""))[-MAX_OUTPUT_TAIL:])
+    return {"ok": True}, 201
+
+
 @app.route("/refresh", methods=["POST"])
 def refresh_now():
     run_health_checks(TIMEOUT_S, SSL_VERIFY)
@@ -338,6 +389,8 @@ def main():
         db.seed_samples(PORT)
         sample_data.seed_demo_hits(TREND_DAYS)
     report_start_button_config()
+    print(f"[jobs] watching {len(JOBS)} scheduled job(s): "
+          f"{', '.join(JOBS) if JOBS else 'none'}")
     start_scheduler()
     print(f"Dashboard running on http://localhost:{PORT}")
     app.run(host=HOST, port=PORT, debug=False, use_reloader=False)
