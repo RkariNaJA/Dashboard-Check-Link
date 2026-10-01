@@ -325,6 +325,9 @@ def start_scheduler():
     scheduler.add_job(run_health_checks, "interval", minutes=CHECK_MIN,
                       args=[TIMEOUT_S, SSL_VERIFY], id="health",
                       next_run_time=datetime.now() + timedelta(seconds=5))
+    # Job runs are tiny and arrive about daily, so once a day is plenty.
+    scheduler.add_job(db.purge_old_job_runs, "interval", hours=24,
+                      id="purge-job-runs")
     scheduler.start()
 
 
