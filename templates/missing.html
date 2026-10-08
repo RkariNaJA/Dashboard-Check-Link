@@ -2,7 +2,8 @@
 {% block title %}Link not found · Link Watch{% endblock %}
 {% block content %}
 <div class="empty">
-  <p><strong>/go/{{ slug }}</strong> doesn't exist (it may have been deleted).</p>
+  <p><span class="short-link">/go/{{ slug }}</span></p>
+  <p>This short link doesn't exist (it may have been deleted).</p>
   <p>Ask your IT team for the current link.</p>
 </div>
 {% endblock %}

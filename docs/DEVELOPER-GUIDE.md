@@ -54,6 +54,15 @@ Then open **http://localhost:8090** in your browser.
 The first run creates `data.db` (the database) and, if `sample_mode = true`,
 4 demo links with fake click history so you can try everything safely.
 
+> **The demo data does not disappear when you turn the flag off.** Both
+> seeders (`db.seed_samples` and `sample_data.seed_demo_hits`) only run when
+> their table is *empty*, so they never re-seed — but equally, nothing ever
+> removes what an earlier run already inserted. Setting
+> `sample_mode = false` stops new seeding and nothing else. To actually get
+> rid of demo data, delete the demo links on **Manage links** (deleting a
+> link cascades to its clicks and check history), or delete `data.db` and
+> start over.
+
 ---
 
 ## How to add and check a link
@@ -141,6 +150,22 @@ cwd     = D:\Path\To\my-dashboard\frontend
 
 > The dashboard itself is deliberately **not** listed — it cannot start
 > itself. It is the one thing you launch by hand after a reboot.
+
+**Pin the port of every Vite app you start this way.** `npm run dev` does not
+guarantee a port: Vite takes 5173 if it is free and otherwise walks up to
+5174, 5175, … So the port an app lands on depends on what else happened to
+start first, and the link you saved in the dashboard silently stops matching
+— the app is running fine but its row reads Down. Fix it in the app's own
+`vite.config.js`, not here:
+
+```js
+export default { server: { port: 5174, strictPort: true } }
+```
+
+`strictPort` makes Vite **fail loudly** instead of drifting to another port,
+which is what you want: a startup error in `logs\<name>.log` is far easier to
+diagnose than a link that is mysteriously Down. Give each app its own port
+and set the link's destination to that same port.
 
 ### What happens when you click Start
 
@@ -230,7 +255,8 @@ New-NetFirewallRule -DisplayName "Link Watch Dashboard" -Direction Inbound -Prot
 
 ## Deploy to the server
 
-1. Copy this whole folder to the server
+1. Copy this whole folder to the server — but **not** `data.db`, so the
+   server starts with an empty database instead of your test data
 2. In `config.ini` set:
    ```ini
    sample_mode = false
@@ -240,8 +266,14 @@ New-NetFirewallRule -DisplayName "Link Watch Dashboard" -Direction Inbound -Prot
    pip install -r requirements.txt
    python app.py
    ```
-4. Delete the demo links (Manage links → Delete) and add your real ones
-5. Team opens `http://SERVERNAME:8090`
+4. Add your real links on **Manage links**. If any demo links are showing,
+   delete them here — step 2 stops new demo data being created but does not
+   remove demo data that already exists (see **How to run** above)
+5. Point each link at an address **users' browsers can reach** — a server
+   name or IP, not `127.0.0.1`. The `/go/` redirect sends the visitor's own
+   browser to that address, so `localhost` would send every user to their
+   own machine
+6. Team opens `http://SERVERNAME:8090`
 
 ### Updating a server that is already running
 
@@ -266,6 +298,12 @@ Python does not pick up new code while it is running.
 > `requirements.txt` has not changed since the first release, so there is
 > normally no need to run `pip install` again.
 
+> **Copy the whole `static\` folder, not single files.** The styling is now
+> split across three stylesheets (`tokens.css`, `style.css`,
+> `components.css`). If one is missing the pages still load, but with no
+> styling at all — plain black text on white. That is the symptom to look for
+> if the dashboard suddenly looks unformatted after an update.
+
 ### Start automatically after a reboot (recommended)
 1. On the server open **Task Scheduler** → **Create Task…**
 2. **General** tab: name it `Link Watch`, tick **Run whether user is logged
@@ -288,16 +326,76 @@ do after a reboot is click **Start all down** to bring the other apps up.
 
 ---
 
+## This deployment (Hi-Tech Apparel)
+
+Everything above is generic. This section records how *our* install is set
+up. Links and click history live in `data.db`, which is **excluded by
+`.gitignore`** — so a fresh clone starts with no links at all and this table
+is the record of what to recreate.
+
+**Server:** `192.0.2.10` · dashboard on port **8090** →
+`http://192.0.2.10:8090`
+
+| Link (name) | Short link | Port | Started by | Where |
+|---|---|---|---|---|
+| Forming Box | `/go/forming-box` | 5174 | `npm run dev` | `D:\All Project for PCK\Forming Box File\src` |
+| Label Converter Excel | `/go/label-converter` | 5176 | `npm run dev` | `D:\All Project for PCK\Make Excel to Excel\src` |
+| Barcode Label Check | `/go/barcode-label-check` | 5177 | `npm run dev` | `D:\All Project for PCK\Compare PDF Barcode and EXCEL\react-app` |
+| BOM Query Web | `/go/bom-query-web` | 8000 | `python -m uvicorn main:app --port 8000` | `D:\All Project for PCK\BOM Query Web\src` |
+| PPS, ACS, WISDOM | `/go/pps-acs-wisdom-compare` | 8080 | `py .\serve.py` **+** `py -m http.server 8080 --directory dist` | `D:\All Project for PCK\PPS,ACS,WISDOM\DashBoard` (backend) and `D:\All Project for PCK\PPS,ACS,WISDOM\DashBoard\frontend` (frontend) |
+
+The dashboard itself runs from
+`D:\All Project for PCK\DashBoard Check link` with `py .\app.py`, and is
+deliberately absent from the table — it is the one thing started by hand
+after a reboot.
+
+### ⚠ The three Vite ports in that table are not stable
+
+Only **8000** and **8080** are fixed, because those commands name their port.
+The three `npm run dev` apps do not: Vite takes 5173 if free and otherwise
+walks upward, so **the port each app gets depends on the order they were
+started in.** Observed on 2026-09-14, within a single afternoon:
+
+```
+first look    5174 Forming Box   5175 Label Converter   (5177 closed)
+hours later   5174 Forming Box   5175 Barcode!          5176 Label Converter   5177 Barcode
+```
+
+Label Converter had moved 5175 → 5176, and Barcode had taken 5175.
+
+**Why this is worse than it sounds.** A drifted port does not always show up
+as a red link. If another app has moved into the port your link points at,
+the health check gets a perfectly good `200` and the row stays **green** —
+while `/go/label-converter` quietly forwards users to the Barcode app. That
+happened here and was only caught by comparing each page's `<title>` against
+the link that pointed to it:
+
+```
+curl -s http://192.0.2.10:5176/ | findstr /i "<title>"
+```
+
+**The fix is to pin the ports**, in each project's own `vite.config.js`:
+
+```js
+export default { server: { port: 5176, strictPort: true } }
+```
+
+`strictPort` makes Vite fail loudly rather than drift. Until all three are
+pinned, treat a green row on a Vite link as "something answered", not "the
+right app answered", and re-check the titles after any restart.
+
+---
+
 ## Configuration reference (`config.ini`)
 
 | Setting | Meaning | Default |
 |---|---|---|
 | `[server] host` | `0.0.0.0` = reachable by the whole network | `0.0.0.0` |
 | `[server] port` | Port of the dashboard **and** of every short link | `8090` |
-| `[health] check_interval_minutes` | How often links are pinged | `5` |
+| `[health] check_interval_minutes` | How often every link is pinged. One pass is **sequential**, so allow `timeout_seconds` per unreachable link | `30` |
 | `[health] timeout_seconds` | How long to wait before calling a link Down | `10` |
 | `[health] ssl_verify` | `false` accepts self-signed internal certificates | `false` |
-| `[app] sample_mode` | `true` = create demo links/history when database is empty. Set `false` on the server | `true` |
+| `[app] sample_mode` | `true` = create demo links/history **when the database is empty**. Set `false` on the server. Turning it off does not delete demo data already in `data.db` | `true` |
 | `[process:<name>] link` | The `/go/<slug>` name of the link this app is behind | — |
 | `[process:<name>] command` | Exactly what you would type in the terminal to start it | — |
 | `[process:<name>] cwd` | The folder to run that command in | — |
@@ -349,7 +447,7 @@ error code or no answer within 10 seconds.
 | Library | Job in this project | Why this one |
 |---|---|---|
 | **Flask** | The web framework — serves the dashboard pages, the manage forms, and the `/go/...` redirect route | Small, simple, perfect for internal tools; one file is enough |
-| **APScheduler** | The background timer that runs health checks every 5 minutes while the web app keeps serving pages | Runs inside the same process — no separate service or Task Scheduler entry needed for the checks |
+| **APScheduler** | The background timer that runs health checks on the `check_interval_minutes` schedule while the web app keeps serving pages | Runs inside the same process — no separate service or Task Scheduler entry needed for the checks |
 | **requests** | Makes the health-check calls to each destination URL and measures response time | The standard way to make HTTP calls in Python. Configured with `trust_env=False` so checks go **directly** to your apps, never through the company proxy (a proxy would answer instead of the real link and fake the result) |
 | **sqlite3** *(built into Python)* | The database — one file, `data.db` | Nothing to install or administer; a single file holds everything and is trivial to back up |
 | **subprocess** *(built into Python)* | Starts the app behind a link when you click **Start** | Each app is launched through `cmd /c` (so both `py ...` and `npm ...` work the same way) and detached from the dashboard's console, so it keeps running after you close that terminal |
@@ -357,7 +455,88 @@ error code or no answer within 10 seconds.
 
 No JavaScript frameworks, no internet CDNs, no external services — the web
 pages are plain HTML + CSS (plus ~15 lines of JS for the Copy button), so
-everything works on a server with **no internet access**.
+everything works on a server with **no internet access**. That rule covers
+the styling too: every font is one that ships with Windows, and the browser
+tab icon is written into the page itself rather than loaded as a file, so a
+page never waits on something it cannot reach.
+
+### The styling (`static/`)
+
+Three stylesheets, loaded in this order by `templates/base.html`. The order
+matters — each one relies on the one before it.
+
+| File | Holds | Change it when |
+|---|---|---|
+| `tokens.css` | Every colour, spacing step, corner radius and shadow — twice: once for the light theme, once for dark | You want to **recolour** the dashboard |
+| `style.css` | The page shell: header bar, headings, cards, form fields, buttons, footer | You are changing a control or the page frame |
+| `components.css` | The data parts: stat tiles, the health dial, the link table, status pills, the 14-day chart | You are changing how the numbers are displayed |
+
+**To change a colour, edit `tokens.css`.** Neither `style.css` nor
+`components.css` contains a single colour of its own — every rule points at a
+token like `var(--accent)`, so one edit there reaches every page. The tokens
+are listed twice in that file: the plain `:root` block is the light theme, and
+the `@media (prefers-color-scheme: dark)` block below it overrides the same
+names for dark. Change a colour in one block and the other theme keeps its own.
+
+The **one exception** is the logo. `templates/base.html` holds its colours
+directly, in three places that must be changed together or the mark will not
+match itself:
+
+| In `base.html` | What it colours |
+|---|---|
+| the `<linearGradient id="lw-face">` stops, and the `#312E81` block behind it | the mark in the header bar |
+| the `%23...` codes inside the `rel="icon"` line | the same mark as the browser-tab icon (a `#` is written `%23` inside that line) |
+| `<meta name="theme-color">` | the browser's own bar colour on mobile |
+
+They sit outside the token system because an icon has to be readable before
+any stylesheet has loaded.
+
+Dark mode follows the **Windows** theme setting (Settings → Personalisation →
+Colours). There is no toggle in the app and nothing is stored — the browser
+reports which mode Windows is in, and the matching tokens apply.
+
+Below 900px wide the link table stops being a table: each row becomes its own
+card. That works because every `<td>` in `templates/dashboard.html` and
+`templates/manage.html` carries a `data-label="..."` attribute — on a narrow
+screen CSS prints that label beside the value, since the real column headings
+are hidden. **If you add a column, give its cells a `data-label` too**, or it
+will lose its heading on phones.
+
+### How one health-check pass runs
+
+`collector.run_health_checks()` walks the enabled links **one at a time** in a
+single loop — there is no concurrency. A link that answers costs a few
+milliseconds, but a link that is unreachable costs the full
+`timeout_seconds` before `requests` gives up.
+
+So the worst case for a whole pass is roughly:
+
+```
+timeout_seconds  x  number of unreachable links
+```
+
+With `timeout_seconds = 10` and 4 dead links, one pass takes ~40 seconds.
+(Only links whose packets are *dropped* cost the full timeout. A port that
+actively refuses the connection fails in milliseconds, so real passes are
+often much faster than the worst case.)
+That has a consequence worth knowing when testing: **for up to a minute after
+a restart, the dashboard is still showing the previous pass's results.** Rows
+update as the loop reaches them, not all at once. If you change a link's URL
+and restart, wait for a full pass before judging the result — otherwise you
+are reading stale rows and will blame the wrong thing.
+
+To force a complete pass immediately instead of waiting, either click
+**Check now** on the dashboard, or run it synchronously:
+
+```
+python -c "import collector; collector.run_health_checks(10, False)"
+```
+
+Each ping uses a `requests` session with `trust_env = False` so the corporate
+proxy is bypassed — a proxy would answer on the app's behalf and report a
+healthy link that is actually down.
+
+---
 
 ### The database (3 tables in `data.db`)
 
@@ -387,7 +566,8 @@ daily chart (group by day).
 | `data.db` | The database file — **this is your data; back it up** |
 | `logs/` | What each started app printed — created on the first Start. Not backed up |
 | `tests/` | `python -m pytest tests/` — the launcher tests start real processes |
-| `templates/`, `static/` | The web pages and styling |
+| `templates/` | The web pages (Jinja2): `base.html` frame, `dashboard.html`, `manage.html`, `edit.html`, `missing.html` |
+| `static/` | The styling — `tokens.css` (colours, both themes), `style.css` (shell, forms, buttons), `components.css` (tiles, dial, table, charts) |
 | `README.md` | GitHub landing page — what the dashboard is, for anyone |
 | `docs/DEVELOPER-GUIDE.md` | this file — setup, deployment, settings, internals |
 
@@ -407,4 +587,7 @@ history are all inside this one file).
 | **No Start buttons at all, and no "Start all down"** | There are no `[process:...]` sections in `config.ini`. On the server, check with `findstr /C:"[process:" config.ini` |
 | **Says "Started" but the link stays Down** | The app was launched but did not come up. Open `logs\<name>.log` — the reason is at the bottom |
 | **"already online - left it alone"** | Something is already answering on that address. That is the guard doing its job; it will not launch a second copy |
-| **A Vite app starts but the link is still Down** | If its usual port was taken, Vite quietly moves to the next one. `logs\<name>.log` shows the port it actually chose |
+| **Demo links still showing after `sample_mode = false`** | The flag only stops *new* seeding; it never deletes. Remove the demo links on **Manage links** — deleting a link also removes its clicks and check history — or delete `data.db` to start clean |
+| **A link is Down but the app is definitely running** | Check the **port** first: `python -c "import socket;s=socket.socket();s.settimeout(2);print(s.connect_ex(('SERVER-IP',PORT))==0)"`. `True` means something is listening and the URL is wrong; `False` means nothing is there. For Vite apps the port is the usual culprit |
+| **Status looks wrong right after a restart** | Checks run sequentially and a dead link costs `timeout_seconds` each, so a full pass can take ~40s. Until it finishes you are seeing the *previous* pass. Click **Check now**, or wait a full pass before concluding anything |
+| **A Vite app starts but the link is still Down** | If its usual port was taken, Vite quietly moves to the next one, so the saved link no longer matches. `logs\<name>.log` shows the port it actually chose — update the link, then pin the port with `strictPort` (see "Start buttons") so it cannot drift again |

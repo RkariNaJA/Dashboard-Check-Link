@@ -176,3 +176,85 @@ def test_dashboard_shows_start_all_when_something_is_configured(
     html = app_module.app.test_client().get("/").get_data(as_text=True)
 
     assert "start-all" in html
+
+
+# ------------------------------------------------- restart + port-in-use
+
+def test_start_route_says_so_when_an_old_copy_holds_the_port(
+        temp_db, a_link, dead_url, tmp_path, monkeypatch):
+    import socket
+    link_id = a_link(dead_url)
+    monkeypatch.setattr(app_module, "LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(app_module, "START_GRACE_SECONDS", 0)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen()
+        port = s.getsockname()[1]
+        monkeypatch.setattr(app_module, "PROCESSES", {"demo": [
+            runner.Proc("demo", "demo", "echo nope", str(tmp_path), port)]})
+
+        html = app_module.app.test_client().post(
+            f"/links/{link_id}/start", follow_redirects=True).get_data(as_text=True)
+
+    assert f"port {port} is already in use" in html
+    assert "Started &#39;Demo&#39;" not in html and "Started 'Demo'" not in html
+
+
+def test_restart_route_runs_even_when_the_link_is_online(
+        temp_db, a_link, live_server, tmp_path, monkeypatch, log_containing):
+    link_id = a_link(live_server)
+    monkeypatch.setattr(app_module, "PROCESSES",
+                        echo_process(tmp_path, "restarted-by-test"))
+    monkeypatch.setattr(app_module, "LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(app_module, "START_GRACE_SECONDS", 0)
+
+    response = app_module.app.test_client().post(
+        f"/links/{link_id}/restart", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert "restarted-by-test" in log_containing(
+        tmp_path / "logs" / "demo.log", "restarted-by-test")
+    assert "Restarted" in response.get_data(as_text=True)
+
+
+def test_restart_route_refuses_a_link_with_no_start_command(
+        temp_db, a_link, live_server, monkeypatch):
+    link_id = a_link(live_server)
+    monkeypatch.setattr(app_module, "PROCESSES", {})
+
+    html = app_module.app.test_client().post(
+        f"/links/{link_id}/restart", follow_redirects=True).get_data(as_text=True)
+
+    assert "no start command" in html.lower()
+
+
+def test_restart_route_survives_an_unknown_link_id(temp_db, tmp_path,
+                                                   monkeypatch):
+    monkeypatch.setattr(app_module, "PROCESSES", echo_process(tmp_path))
+
+    response = app_module.app.test_client().post(
+        "/links/9999/restart", follow_redirects=True)
+
+    assert response.status_code == 200
+
+
+def test_dashboard_offers_restart_for_an_online_configured_link(
+        temp_db, a_link, live_server, tmp_path, monkeypatch):
+    link_id = a_link(live_server)
+    monkeypatch.setattr(app_module, "PROCESSES", echo_process(tmp_path))
+    from collector import check_one_link
+    check_one_link(link_id, live_server, 5, False)   # record it as online
+
+    html = app_module.app.test_client().get("/").get_data(as_text=True)
+
+    assert f"/links/{link_id}/restart" in html
+
+
+def test_dashboard_offers_no_restart_for_an_unconfigured_link(
+        temp_db, a_link, live_server, monkeypatch):
+    link_id = a_link(live_server)
+    monkeypatch.setattr(app_module, "PROCESSES", {})
+
+    html = app_module.app.test_client().get("/").get_data(as_text=True)
+
+    assert f"/links/{link_id}/restart" not in html

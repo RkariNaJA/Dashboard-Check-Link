@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import (Flask, flash, redirect, render_template, request, url_for)
 
 import db
+import jobs
 import runner
 from collector import check_one_link, run_health_checks
 
@@ -23,12 +24,19 @@ SSL_VERIFY = config.getboolean("health", "ssl_verify", fallback=False)
 SAMPLE_MODE = config.getboolean("app", "sample_mode", fallback=False)
 HOST = config.get("server", "host", fallback="0.0.0.0")
 PORT = config.getint("server", "port", fallback=8090)
+JOBS = jobs.load_jobs(config)
+JOB_TOKEN = config.get("jobs", "token", fallback="").strip()
 
 app = Flask(__name__)
 app.secret_key = "internal-link-dashboard"
 
 TREND_DAYS = 14
-RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static", "services"}
+RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static", "services",
+                  "jobs"}
+
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+# the end of a log is where the error is, so long output is cut from the front
+MAX_OUTPUT_TAIL = 8000
 
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 # how long to let an app boot before asking whether it came up
@@ -51,6 +59,34 @@ def unique_slug(conn, wanted, ignore_id=None):
             return slug
         n += 1
         slug = f"{wanted}-{n}"
+
+
+# ------------------------------------------------------- display helpers
+
+@app.template_filter("ago")
+def ago(stamp):
+    """'2 h ago'. Absolute times in a table are hard to scan at a glance."""
+    if not stamp:
+        return "never"
+    seconds = (datetime.now()
+               - datetime.strptime(stamp, TIMESTAMP_FORMAT)).total_seconds()
+    if seconds < 90:
+        return "just now"
+    if seconds < 5400:
+        return f"{int(seconds // 60)} min ago"
+    if seconds < 172800:
+        return f"{int(seconds // 3600)} h ago"
+    return f"{int(seconds // 86400)} d ago"
+
+
+@app.template_filter("duration")
+def duration(ms):
+    if ms is None:
+        return "—"
+    seconds = int(ms) // 1000
+    if seconds < 60:
+        return f"{seconds}s"
+    return f"{seconds // 60}m {seconds % 60:02d}s"
 
 
 # ------------------------------------------------------------------ queries
@@ -131,9 +167,15 @@ def go(slug):
 
 @app.route("/")
 def dashboard():
+    """Links and jobs share one page - two views of the same question."""
+    view = "jobs" if request.args.get("view") == "jobs" else "links"
     rows = load_dashboard_rows()
-    return render_template("dashboard.html", rows=rows,
-                           summary=summary_of(rows),
+    job_rows = jobs.build_rows(JOBS, db.latest_job_runs(), datetime.now())
+    return render_template("dashboard.html", view=view,
+                           rows=rows, summary=summary_of(rows),
+                           job_rows=job_rows,
+                           job_summary=jobs.summarize(job_rows,
+                                                      db.job_runs_since(24)),
                            check_interval=CHECK_MIN)
 
 
@@ -226,15 +268,17 @@ def why_not_start(link, processes):
     return None
 
 
-def start_and_report(links, processes):
+def start_and_report(links, processes, action=None):
     """Launch everything for these links, wait once, then re-check them.
 
     One wait for the whole batch, so starting four apps costs one pause
-    and not four. Returns a list of human-readable problems.
+    and not four. `action` is runner.start_link (default) or
+    runner.restart_link. Returns a list of human-readable problems.
     """
+    action = action or runner.start_link
     problems = []
     for link in links:
-        for result in runner.start_link(link["slug"], processes, LOG_DIR):
+        for result in action(link["slug"], processes, LOG_DIR):
             if not result.ok:
                 problems.append(f"{link['name']} ({result.name}): "
                                 f"{result.message}")
@@ -268,6 +312,32 @@ def start_link(link_id):
     return redirect(url_for("dashboard"))
 
 
+@app.route("/links/<int:link_id>/restart", methods=["POST"])
+def restart_link(link_id):
+    """Stop the old copy (by its configured port) and start a fresh one.
+
+    Unlike Start this runs while the link is online - replacing a running
+    old version is the whole point.
+    """
+    with db.get_conn() as conn:
+        link = conn.execute("SELECT * FROM links WHERE id = ?",
+                            (link_id,)).fetchone()
+    if link is None:
+        flash("Link not found.", "error")
+        return redirect(url_for("dashboard"))
+    if not PROCESSES.get(link["slug"]):
+        flash(f"No start command is configured for '{link['name']}'.", "error")
+        return redirect(url_for("dashboard"))
+
+    problems = start_and_report([link], PROCESSES, runner.restart_link)
+    if problems:
+        flash("Could not restart - " + "; ".join(problems), "error")
+    else:
+        flash(f"Restarted '{link['name']}'. If it stays down, see "
+              f"logs/ for what it printed.", "ok")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/services/start-all", methods=["POST"])
 def start_all():
     with db.get_conn() as conn:
@@ -288,6 +358,69 @@ def start_all():
         flash(f"Started {len(to_start)}: {names}. If any stays down, see "
               f"logs/ for what it printed.", "ok")
     return redirect(url_for("dashboard"))
+
+
+# ------------------------------------------------- hearing back from jobs
+
+def _clean_stamp(value):
+    """Accept only 'YYYY-MM-DD HH:MM:SS'.
+
+    Validating here means every later reader - status, sorting, the
+    'overdue' maths - can parse without guarding. Raises ValueError.
+    """
+    text = str(value)
+    datetime.strptime(text, TIMESTAMP_FORMAT)
+    return text
+
+
+@app.route("/jobs/<slug>/report", methods=["POST"])
+def report_job_run(slug):
+    """A job's wrapper telling us how its run went.
+
+    An unknown slug is a 404 on purpose: a typo in a Scheduled Task should
+    fail loudly at the wrapper, not quietly become a job that waits for a
+    first report that will never come.
+    """
+    if JOB_TOKEN and request.headers.get("X-Job-Token", "") != JOB_TOKEN:
+        return {"error": "bad or missing X-Job-Token"}, 401
+    if slug not in JOBS:
+        return {"error": f"no [job:{slug}] section on this dashboard"}, 404
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return {"error": "expected a JSON object"}, 400
+    try:
+        started_at = _clean_stamp(payload["started_at"])
+        finished_at = _clean_stamp(payload["finished_at"])
+        duration_ms = int(payload["duration_ms"])
+        exit_code = int(payload["exit_code"])
+    except (KeyError, TypeError, ValueError) as exc:
+        return {"error": f"bad or missing field: {exc}"}, 400
+
+    db.record_job_run(slug, started_at, finished_at, duration_ms, exit_code,
+                      str(payload.get("host", ""))[:100],
+                      str(payload.get("output_tail", ""))[-MAX_OUTPUT_TAIL:])
+    return {"ok": True}, 201
+
+
+@app.route("/jobs/<slug>")
+def job_detail(slug):
+    """Run history and captured output for one job.
+
+    This page is the point of the whole feature: when a nightly job fails
+    you read what it printed here, instead of remoting into its server to
+    find a log file on somebody's Desktop.
+    """
+    job = JOBS.get(slug)
+    if job is None:
+        flash(f"No job named '{slug}' is configured on this dashboard.",
+              "error")
+        return redirect(url_for("dashboard", view="jobs"))
+    runs = db.recent_job_runs(slug, limit=20)
+    return render_template(
+        "job_detail.html", job=job, runs=runs,
+        status=jobs.derive_status(job, runs[0] if runs else None,
+                                  datetime.now()))
 
 
 @app.route("/refresh", methods=["POST"])
@@ -325,6 +458,9 @@ def start_scheduler():
     scheduler.add_job(run_health_checks, "interval", minutes=CHECK_MIN,
                       args=[TIMEOUT_S, SSL_VERIFY], id="health",
                       next_run_time=datetime.now() + timedelta(seconds=5))
+    # Job runs are tiny and arrive about daily, so once a day is plenty.
+    scheduler.add_job(db.purge_old_job_runs, "interval", hours=24,
+                      id="purge-job-runs")
     scheduler.start()
 
 
@@ -335,6 +471,8 @@ def main():
         db.seed_samples(PORT)
         sample_data.seed_demo_hits(TREND_DAYS)
     report_start_button_config()
+    print(f"[jobs] watching {len(JOBS)} scheduled job(s): "
+          f"{', '.join(JOBS) if JOBS else 'none'}")
     start_scheduler()
     print(f"Dashboard running on http://localhost:{PORT}")
     app.run(host=HOST, port=PORT, debug=False, use_reloader=False)

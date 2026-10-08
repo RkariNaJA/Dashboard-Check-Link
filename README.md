@@ -53,13 +53,19 @@ names are not secret.</sub>
 
 ## What the dashboard shows
 
+Across the top, a **fleet health dial** shows at a glance what share of your links are answering
+right now, next to the running totals — links tracked, online, down, clicks today, clicks all-time.
+The **Down** tile turns red the moment anything stops answering.
+
+Then one row per link:
+
 | Column | Meaning |
 |---|---|
-| **Status** | 🟢 Online / 🔴 Down — checked every 5 minutes, with a **Start** button beside it when the app is down |
-| **Response** | how fast the link answered, in milliseconds |
+| **Status** | 🟢 Online / 🔴 Down — rechecked on a timer (`check_interval_minutes`, 30 by default), with a **Start** button beside it when the app is down |
+| **Response** | how fast the link answered, in milliseconds, with a small meter beside the number |
 | **Today** | clicks today / how many different people today |
 | **Total** | all-time clicks / all-time different people |
-| **Last 14 days** | a small bar chart of clicks per day |
+| **Last 14 days** | a 14-day bar chart of clicks per day — today's bar is highlighted |
 | **Last checked** | when the last health check ran |
 
 The page refreshes itself every minute, and **Check now** forces an immediate health check.
@@ -83,8 +89,13 @@ The page refreshes itself every minute, and **Check now** forces an immediate he
   forwarding, so nobody's saved link dies.
 - **Tiny, backup-friendly storage** — one SQLite file, `data.db`. Storing one row per day + IP
   instead of one row per click keeps it small forever.
-- **No internet needed** — plain HTML + CSS pages, no JS framework, no CDN. Works on a server with
-  no outside access.
+- **Reads on any screen** — on a phone or a narrow window the table stops being a table: each link
+  becomes its own card carrying its column labels, so nothing has to be scrolled sideways.
+- **Light and dark** — the dashboard follows the Windows theme setting automatically. No toggle to
+  find, nothing to configure.
+- **No internet needed** — plain HTML + CSS pages, no JS framework, no CDN, no web fonts. Every
+  font ships with Windows and the tab icon is inlined, so nothing is ever fetched from outside.
+  Works on a server with no outside access.
 
 ---
 
@@ -108,11 +119,21 @@ The first run creates `data.db`, and with `sample_mode = true` in `config.ini` i
 demo links with fake click history so you can try everything safely. Set `sample_mode = false` on
 the real server.
 
+> **Setting `sample_mode = false` does not remove demo data that is already there.** The seeder
+> only skips when the database is empty, so demo links created by an earlier run stay in `data.db`
+> and keep showing on the dashboard. Delete them on the **Manage links** page (or start fresh by
+> deleting `data.db`) — the flag alone only stops *new* seeding.
+
 > The dashboard has to stay running for clicks to be counted — the short links are served by it.
 > On a server, start it automatically (Task Scheduler recipe in the guide).
 >
 > The dashboard cannot start *itself* — it is the one thing you launch by hand (or by scheduled
 > task) after a reboot. Once it is up, its Start buttons bring back everything else.
+>
+> **Start** never replaces a copy that is already running. To load a new version (new files
+> copied to the server), press **Restart**: it stops whatever holds the app's `port` (set in
+> `config.ini`) and starts it fresh. Without a `port`, Start can launch a second copy that dies
+> on "address already in use" while the **old** version keeps serving.
 >
 > Clicks are only counted through the **short** link. Opening the destination address directly is
 > invisible to the dashboard.
@@ -123,11 +144,12 @@ the real server.
 
 | | |
 |---|---|
-| **Built with** | Python + [Flask](https://flask.palletsprojects.com/) 3, SQLite (built in), [APScheduler](https://apscheduler.readthedocs.io/) for the 5-minute checks, [requests](https://requests.readthedocs.io/) for the pings, Jinja2 templates |
+| **Built with** | Python + [Flask](https://flask.palletsprojects.com/) 3, SQLite (built in), [APScheduler](https://apscheduler.readthedocs.io/) for the timed checks, [requests](https://requests.readthedocs.io/) for the pings, Jinja2 templates |
 | **The app** | [`app.py`](app.py) — pages, the `/go/<slug>` counting redirect, the scheduler |
 | **Health checks** | [`collector.py`](collector.py) — pings every link, saves status + response time |
-| **Start buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/` |
+| **Start / Restart buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/`; with a `port` it refuses to start over an old copy, and Restart stops that copy first |
 | **Storage** | [`db.py`](db.py) — 3 tables: `links`, `daily_hits` (per day + IP), `checks` (kept 30 days) |
+| **Look and feel** | [`static/`](static) — `tokens.css` (every colour, both themes), `style.css` (page shell, forms, buttons), `components.css` (stat tiles, health dial, link table, charts) |
 | **Settings** | [`config.ini`](config.ini) — port, check interval, timeout, SSL verification, sample mode, start commands |
 | **Tests** | [`tests/`](tests) — `python -m pytest tests/` (the launcher tests spawn real processes) |
 

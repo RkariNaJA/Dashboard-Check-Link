@@ -34,6 +34,22 @@ CREATE TABLE IF NOT EXISTS checks (
     error        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_checks_link_time ON checks(link_id, checked_at);
+
+-- One row per completed run of a scheduled job. Jobs themselves are
+-- declared in config.ini, so there is no table of jobs to keep in sync.
+CREATE TABLE IF NOT EXISTS job_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug         TEXT NOT NULL,          -- matches a [job:<slug>] section
+    started_at   TEXT NOT NULL,          -- local time, from the job's host
+    finished_at  TEXT NOT NULL,
+    duration_ms  INTEGER NOT NULL,
+    exit_code    INTEGER,
+    ok           INTEGER NOT NULL,       -- exit_code == 0
+    host         TEXT NOT NULL DEFAULT '',
+    output_tail  TEXT NOT NULL DEFAULT '',
+    received_at  TEXT NOT NULL           -- this dashboard's own clock
+);
+CREATE INDEX IF NOT EXISTS idx_job_runs_slug_time ON job_runs(slug, started_at);
 """
 
 
@@ -77,3 +93,60 @@ def seed_samples(port):
         conn.executemany(
             "INSERT INTO links (name, slug, url) VALUES (?, ?, ?)", demo
         )
+
+
+JOB_RUN_RETENTION_DAYS = 90
+
+
+def record_job_run(slug, started_at, finished_at, duration_ms, exit_code,
+                   host, output_tail):
+    """Store one finished run. `ok` is derived here so every reader agrees."""
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO job_runs (slug, started_at, finished_at, duration_ms,
+                                     exit_code, ok, host, output_tail, received_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))""",
+            (slug, started_at, finished_at, duration_ms, exit_code,
+             1 if exit_code == 0 else 0, host, output_tail),
+        )
+
+
+def latest_job_runs():
+    """Newest run per slug, as {slug: Row}.
+
+    SQLite guarantees the bare columns come from the row that produced
+    MAX(started_at), so one grouped query answers the whole dashboard.
+    output_tail is left out - the list view never shows it and it is the
+    one big column.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT slug, MAX(started_at) AS started_at, finished_at,
+                      duration_ms, exit_code, ok, host, received_at
+               FROM job_runs GROUP BY slug"""
+        ).fetchall()
+    return {row["slug"]: row for row in rows}
+
+
+def recent_job_runs(slug, limit=20):
+    """Run history for one job, newest first, with its captured output."""
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT * FROM job_runs WHERE slug = ?
+               ORDER BY started_at DESC LIMIT ?""", (slug, limit)).fetchall()
+
+
+def job_runs_since(hours):
+    """How many reports arrived in the last `hours` - a liveness figure."""
+    with get_conn() as conn:
+        return conn.execute(
+            """SELECT COUNT(*) FROM job_runs
+               WHERE received_at >= datetime('now', 'localtime', ?)""",
+            (f"-{hours} hours",)).fetchone()[0]
+
+
+def purge_old_job_runs():
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM job_runs WHERE received_at < datetime('now', 'localtime', ?)",
+            (f"-{JOB_RUN_RETENTION_DAYS} days",))
