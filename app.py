@@ -268,15 +268,17 @@ def why_not_start(link, processes):
     return None
 
 
-def start_and_report(links, processes):
+def start_and_report(links, processes, action=None):
     """Launch everything for these links, wait once, then re-check them.
 
     One wait for the whole batch, so starting four apps costs one pause
-    and not four. Returns a list of human-readable problems.
+    and not four. `action` is runner.start_link (default) or
+    runner.restart_link. Returns a list of human-readable problems.
     """
+    action = action or runner.start_link
     problems = []
     for link in links:
-        for result in runner.start_link(link["slug"], processes, LOG_DIR):
+        for result in action(link["slug"], processes, LOG_DIR):
             if not result.ok:
                 problems.append(f"{link['name']} ({result.name}): "
                                 f"{result.message}")
@@ -306,6 +308,32 @@ def start_link(link_id):
         flash("Could not start - " + "; ".join(problems), "error")
     else:
         flash(f"Started '{link['name']}'. If it stays down, see "
+              f"logs/ for what it printed.", "ok")
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/links/<int:link_id>/restart", methods=["POST"])
+def restart_link(link_id):
+    """Stop the old copy (by its configured port) and start a fresh one.
+
+    Unlike Start this runs while the link is online - replacing a running
+    old version is the whole point.
+    """
+    with db.get_conn() as conn:
+        link = conn.execute("SELECT * FROM links WHERE id = ?",
+                            (link_id,)).fetchone()
+    if link is None:
+        flash("Link not found.", "error")
+        return redirect(url_for("dashboard"))
+    if not PROCESSES.get(link["slug"]):
+        flash(f"No start command is configured for '{link['name']}'.", "error")
+        return redirect(url_for("dashboard"))
+
+    problems = start_and_report([link], PROCESSES, runner.restart_link)
+    if problems:
+        flash("Could not restart - " + "; ".join(problems), "error")
+    else:
+        flash(f"Restarted '{link['name']}'. If it stays down, see "
               f"logs/ for what it printed.", "ok")
     return redirect(url_for("dashboard"))
 

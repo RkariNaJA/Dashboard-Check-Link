@@ -130,6 +130,11 @@ the real server.
 > The dashboard cannot start *itself* — it is the one thing you launch by hand (or by scheduled
 > task) after a reboot. Once it is up, its Start buttons bring back everything else.
 >
+> **Start** never replaces a copy that is already running. To load a new version (new files
+> copied to the server), press **Restart**: it stops whatever holds the app's `port` (set in
+> `config.ini`) and starts it fresh. Without a `port`, Start can launch a second copy that dies
+> on "address already in use" while the **old** version keeps serving.
+>
 > Clicks are only counted through the **short** link. Opening the destination address directly is
 > invisible to the dashboard.
 
@@ -142,7 +147,7 @@ the real server.
 | **Built with** | Python + [Flask](https://flask.palletsprojects.com/) 3, SQLite (built in), [APScheduler](https://apscheduler.readthedocs.io/) for the timed checks, [requests](https://requests.readthedocs.io/) for the pings, Jinja2 templates |
 | **The app** | [`app.py`](app.py) — pages, the `/go/<slug>` counting redirect, the scheduler |
 | **Health checks** | [`collector.py`](collector.py) — pings every link, saves status + response time |
-| **Start buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/` |
+| **Start / Restart buttons** | [`runner.py`](runner.py) — launches the app behind a link, detached, output to `logs/`; with a `port` it refuses to start over an old copy, and Restart stops that copy first |
 | **Storage** | [`db.py`](db.py) — 3 tables: `links`, `daily_hits` (per day + IP), `checks` (kept 30 days) |
 | **Look and feel** | [`static/`](static) — `tokens.css` (every colour, both themes), `style.css` (page shell, forms, buttons), `components.css` (stat tiles, health dial, link table, charts) |
 | **Settings** | [`config.ini`](config.ini) — port, check interval, timeout, SSL verification, sample mode, start commands |

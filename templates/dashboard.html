@@ -125,6 +125,14 @@
               <button class="btn btn-small" type="submit">Start</button>
             </form>
           {% endif %}
+          {# Restart = stop the old copy by its configured port, then start fresh.
+             Offered online or not: replacing a running old version is the point. #}
+          <form method="post"
+                action="{{ url_for('restart_link', link_id=r.link.id) }}"
+                onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">
+            <button class="btn btn-small" type="submit"
+                    title="Stop the running copy and start a fresh one">Restart</button>
+          </form>
         {% endif %}
         </div>
       </td>
