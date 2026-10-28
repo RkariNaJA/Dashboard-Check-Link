@@ -43,7 +43,7 @@ User instantly lands on:   http://SERVERNAME:5000/   (your real app)
 Your apps need **no changes at all** — the dashboard never touches them, it just owns the address
 people click.
 
-![The dashboard: 7 links tracked, 5 online, 2 down, with clicks and response times](docs/images/link-watch-dashboard.jpg)
+![The dashboard: 5 links tracked, 4 online, 1 down, with clicks, response times and Start/Restart buttons](docs/images/link-watch-dashboard.jpg)
 
 <sub>Seven internal tools tracked — clicks today and all-time, how many different people, response
 time, and a 14-day bar chart per link. The destination addresses are blurred; the `/go/` short
