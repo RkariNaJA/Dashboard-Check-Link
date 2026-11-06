@@ -1,39 +1,11 @@
-{# The jobs view. Reuses the links view's status pills so a red pill means
-   the same thing on both: this needs looking at. #}
-<div class="page-head">
-  <div>
-    <h1>Scheduled jobs</h1>
-    <p class="page-note">
-      Jobs report in when they finish - this dashboard never contacts
-      their machines. A job that stops running goes Overdue on its own.
-    </p>
-  </div>
-</div>
-
-<div class="stat-band">
-  <div class="stat">
-    <div class="stat-label">Jobs watched</div>
-    <div class="stat-value">{{ job_summary.total }}</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Passing</div>
-    <div class="stat-value ok-text">{{ job_summary.ok }}</div>
-  </div>
-  <div class="stat {{ 'stat-alert' if job_summary.failed }}">
-    <div class="stat-label">Failed</div>
-    <div class="stat-value {{ 'bad-text' if job_summary.failed else '' }}">{{ job_summary.failed }}</div>
-  </div>
-  <div class="stat {{ 'stat-alert' if job_summary.overdue }}">
-    <div class="stat-label">Overdue</div>
-    <div class="stat-value {{ 'bad-text' if job_summary.overdue else '' }}">{{ job_summary.overdue }}</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Reports in 24 h</div>
-    <div class="stat-value">{{ job_summary.runs_24h }}</div>
-  </div>
-</div>
-
+{# The jobs view's table; its headline and figures live in dashboard.html's
+   band. Reuses the links view's status pills so a red pill means the same
+   thing on both: this needs looking at. #}
 {% if job_rows %}
+<div class="table-head">
+  <h2>Scheduled jobs</h2>
+  <span class="count-note">open a job to see what it printed</span>
+</div>
 <div class="table-wrap">
 <table class="links-table">
   <thead>
@@ -48,7 +20,7 @@
   </thead>
   <tbody>
   {% for r in job_rows %}
-    <tr>
+    <tr class="{{ 'row-down' if r.status in ('failed', 'overdue') }}">
       <td class="cell-link">
         <div class="link-name">
           <a href="{{ url_for('job_detail', slug=r.job.slug) }}">{{ r.job.name }}</a>

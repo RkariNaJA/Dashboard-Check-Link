@@ -1,14 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Edit link · Link Watch{% endblock %}
-{% block content %}
+{% block band %}
+<section class="band-head">
+  <div class="wrap">
+    <div>
+      <h1>Edit {{ link.name }}</h1>
+      <p class="band-note">
+        Editing changes where <code>/go/{{ link.slug }}</code> sends people. The
+        click history stays with the link.
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}
 
-<div class="page-head">
-  <h1>Edit link</h1>
-</div>
-<p class="page-note">
-  Editing changes where <code>/go/{{ link.slug }}</code> sends people. The
-  click history stays with the link.
-</p>
+{% block content %}
 
 <section class="card">
   <form method="post" class="add-form add-form-column">

@@ -1,29 +1,34 @@
 {% extends "base.html" %}
 {% block title %}{{ job.name }} · Link Watch{% endblock %}
-{% block content %}
+{% block band %}
+<section class="band-head">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow"><a href="{{ url_for('dashboard', view='jobs') }}"
+         class="back">&larr; All jobs</a></p>
+      <h1>{{ job.name }}</h1>
+      <p class="band-note">
+        <code>{{ job.slug }}</code>
+        {%- if job.host %} &middot; runs on {{ job.host }}{% endif %}
+        &middot; expected every {{ (job.expect_every // 3600) }} h
+      </p>
+      <div class="actions">
+        {% if status == 'ok' %}
+          <span class="status status-ok"><span class="dot"></span>Passing</span>
+        {% elif status == 'failed' %}
+          <span class="status status-bad"><span class="dot"></span>Failed</span>
+        {% elif status == 'overdue' %}
+          <span class="status status-bad"><span class="dot"></span>Overdue</span>
+        {% else %}
+          <span class="status status-off"><span class="dot"></span>Waiting for first report</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
 
-<div class="page-head">
-  <div>
-    <h1>{{ job.name }}</h1>
-    <p class="page-note">
-      <code>{{ job.slug }}</code>
-      {%- if job.host %} &middot; runs on {{ job.host }}{% endif %}
-      &middot; expected every {{ (job.expect_every // 3600) }} h
-    </p>
-  </div>
-  <div class="actions">
-    {% if status == 'ok' %}
-      <span class="status status-ok"><span class="dot"></span>Passing</span>
-    {% elif status == 'failed' %}
-      <span class="status status-bad"><span class="dot"></span>Failed</span>
-    {% elif status == 'overdue' %}
-      <span class="status status-bad"><span class="dot"></span>Overdue</span>
-    {% else %}
-      <span class="status status-off"><span class="dot"></span>Waiting for first report</span>
-    {% endif %}
-    <a class="btn" href="{{ url_for('dashboard', view='jobs') }}">All jobs</a>
-  </div>
-</div>
+{% block content %}
 
 {% if runs %}
 <div class="table-wrap">
@@ -41,7 +46,7 @@
   <tbody>
   {% for run in runs %}
     {% set first_line = run["output_tail"].splitlines()[0] if run["output_tail"] else "" %}
-    <tr>
+    <tr class="{{ '' if run["ok"] else 'row-down' }}">
       <td data-label="Started">
         {{ run["started_at"] }}
         <div class="dim">{{ run["started_at"] | ago }}</div>
@@ -64,7 +69,7 @@
 </div>
 
 {# The latest run's output, which is the reason not to remote in. #}
-<h2 class="section-head">What it printed &middot; {{ runs[0]["started_at"] }}</h2>
+<h2 class="section-head">What it printed <span class="dim">{{ runs[0]["started_at"] }}</span></h2>
 <pre class="job-output">{{ runs[0]["output_tail"] or "(the job printed nothing)" }}</pre>
 
 {% else %}

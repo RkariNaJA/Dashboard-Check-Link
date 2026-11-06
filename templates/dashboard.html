@@ -1,184 +1,261 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · Link Watch{% endblock %}
-{% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
-{% block content %}
+{# No meta refresh: it would close an open detail pop-up. The script at the
+   bottom reloads every minute instead, and waits while one is open. #}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='detail.css') }}">{% endblock %}
 
+{% block band %}
 {# One page, two questions: is the web app up, and did the batch job run. #}
-<nav class="view-toggle">
-  <a href="{{ url_for('dashboard') }}"
-     class="{{ 'active' if view == 'links' }}">
-    Links <span class="count">{{ summary.total }}</span></a>
-  <a href="{{ url_for('dashboard', view='jobs') }}"
-     class="{{ 'active' if view == 'jobs' }}">
-    Jobs <span class="count">{{ job_summary.total }}</span>
-    {%- if job_summary.overdue or job_summary.failed %}
-    <span class="count count-bad">{{ job_summary.overdue + job_summary.failed }}</span>
-    {%- endif %}</a>
-</nav>
-
-{% if view == 'jobs' %}{% include "_jobs.html" %}{% else %}
-
-{% set pct = (summary.online * 100 // summary.total) if summary.total else 0 %}
-
-<div class="page-head">
-  <div>
-    <h1>Dashboard</h1>
-    <p class="page-note">
-      Clicks are counted the moment someone uses a short /go/ link. Health
-      checks run every {{ check_interval }} min.
-    </p>
-  </div>
-  <div class="actions">
-    <span class="live"><span class="live-dot"></span>Live</span>
-    {% if summary.startable %}
-    <form method="post" action="{{ url_for('start_all') }}">
-      <button class="btn btn-primary" type="submit">Start all down</button>
-    </form>
-    {% endif %}
-    <form method="post" action="{{ url_for('refresh_now') }}">
-      <button class="btn" type="submit">Check now</button>
-    </form>
-  </div>
+<div class="wrap">
+  <nav class="view-toggle">
+    <a href="{{ url_for('dashboard') }}"
+       class="{{ 'active' if view == 'links' }}">
+      Links <span class="count">{{ summary.total }}</span></a>
+    <a href="{{ url_for('dashboard', view='jobs') }}"
+       class="{{ 'active' if view == 'jobs' }}">
+      Jobs <span class="count">{{ job_summary.total }}</span>
+      {%- if job_summary.overdue or job_summary.failed %}
+      <span class="count count-bad">{{ job_summary.overdue + job_summary.failed }}</span>
+      {%- endif %}</a>
+  </nav>
 </div>
 
-<div class="stat-band">
-  <div class="stat dial-tile {{ 'is-warn' if summary.offline else 'is-good' }}">
-    <div class="dial" style="--pct: {{ pct }}">
-      <div class="dial-face">
-        <span class="dial-num">{{ pct }}<i>%</i></span>
-        <span class="dial-cap">healthy</span>
+{% if view == 'jobs' %}
+{# ---------------------------------------------------------- jobs band #}
+{% set ns = namespace(bad=[]) %}
+{% for r in job_rows %}{% if r.status in ('failed', 'overdue') %}
+  {% set ns.bad = ns.bad + [r.job.name] %}{% endif %}{% endfor %}
+<section class="band-head has-side">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow"><span class="dot"></span>Jobs report in when they finish</p>
+      <h1>
+        {%- if not job_summary.total %}No scheduled jobs yet.
+        {%- elif not ns.bad and job_summary.ok == job_summary.total %}All {{ job_summary.total }} jobs passing.
+        {%- else %}{{ job_summary.ok }} of {{ job_summary.total }} jobs passing.
+          {%- if ns.bad %} <span class="muted">{{ ns.bad | join(', ') }} {{ 'needs' if ns.bad | length == 1 else 'need' }} a look.</span>{% endif %}
+        {%- endif %}</h1>
+      <p class="band-note">This dashboard never contacts their machines. A job
+        that stops running goes Overdue on its own.</p>
+      {% if job_rows %}
+      <div class="fleet" role="img" aria-label="{{ job_summary.ok }} of {{ job_summary.total }} jobs passing">
+        {% for r in job_rows %}
+        <span class="{{ 'is-ok' if r.status == 'ok' else ('is-bad' if r.status in ('failed', 'overdue')) }}"
+              title="{{ r.job.name }}"></span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="figures">
+      <div class="stat">
+        <div class="stat-label">Passing</div>
+        <div class="stat-value ok-text">{{ job_summary.ok }}</div>
+      </div>
+      <div class="stat {{ 'stat-alert' if job_summary.failed }}">
+        <div class="stat-label">Failed</div>
+        <div class="stat-value {{ 'bad-text' if job_summary.failed }}">{{ job_summary.failed }}</div>
+      </div>
+      <div class="stat {{ 'stat-alert' if job_summary.overdue }}">
+        <div class="stat-label">Overdue</div>
+        <div class="stat-value {{ 'bad-text' if job_summary.overdue }}">{{ job_summary.overdue }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Reports in 24 h</div>
+        <div class="stat-value">{{ job_summary.runs_24h }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% else %}
+{# --------------------------------------------------------- links band #}
+{% set ns = namespace(down=[], last='', waiting=0) %}
+{% for r in rows if r.link.enabled %}
+  {% if r.check is none %}{% set ns.waiting = ns.waiting + 1 %}
+  {% elif not r.check.ok %}{% set ns.down = ns.down + [r.link.name] %}{% endif %}
+  {% if r.check and r.check.checked_at > ns.last %}{% set ns.last = r.check.checked_at %}{% endif %}
+{% endfor %}
+<section class="band-head has-side">
+  <div class="wrap">
+    {# Status line left, the page's actions right, on one row across the band. #}
+    <div class="band-top">
+      <p class="eyebrow"><span class="dot"></span>Live &middot; refreshes every minute
+        {%- if ns.last %} &middot; last check {{ ns.last[11:16] }}{% endif %}</p>
+      <div class="actions">
+        {% if summary.startable %}
+        <form method="post" action="{{ url_for('start_all') }}">
+          <button class="btn btn-primary" type="submit">Start all down</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('refresh_now') }}">
+          <button class="btn" type="submit">Check now</button>
+        </form>
       </div>
     </div>
     <div>
-      <div class="stat-label">Fleet health</div>
-      <div class="stat-foot">
-        {{ summary.online }} of {{ summary.total }} responding
-        {%- if summary.offline %} &middot; {{ summary.offline }} down{% endif %}
+      <h1>
+        {%- if not summary.total %}No links watched yet.
+        {%- elif summary.online == summary.total %}All {{ summary.total }} apps online.
+        {%- else %}{{ summary.online }} of {{ summary.total }} apps online.
+          {%- if ns.down %} <span class="muted">{{ ns.down | join(', ') }} {{ 'is' if ns.down | length == 1 else 'are' }} down.</span>
+          {%- else %} <span class="muted">Waiting for the first check.</span>{% endif %}
+        {%- endif %}</h1>
+      {% if summary.total %}
+      {# Health as a donut: one segment per state, a 2px gap between them,
+         and the legend spells each state out so colour is never alone. #}
+      {% set parts = [('Online', summary.online, 'is-ok'),
+                      ('Down', summary.offline, 'is-bad'),
+                      ('Waiting', ns.waiting, 'is-wait')] %}
+      {% set seg = namespace(off=0, count=0) %}
+      {% for p in parts if p[1] %}{% set seg.count = seg.count + 1 %}{% endfor %}
+      {% set gap = 1.2 if seg.count > 1 else 0 %}
+      <div class="health">
+        <div class="donut">
+          <svg viewBox="0 0 120 120" role="img"
+               aria-label="{{ summary.online }} of {{ summary.total }} apps online">
+            <circle class="donut-track" cx="60" cy="60" r="50" pathLength="100"/>
+            {% for label, n, cls in parts if n %}
+              {% set len = n * 100 / summary.total %}
+              <circle class="donut-seg {{ cls }}" cx="60" cy="60" r="50" pathLength="100"
+                      stroke-dasharray="{{ '%.2f' | format(len - gap) }} {{ '%.2f' | format(100 - len + gap) }}"
+                      stroke-dashoffset="{{ '%.2f' | format(-seg.off) }}"
+                      transform="rotate(-90 60 60)">
+                <title>{{ n }} {{ label | lower }} &middot; {{ (n * 100 / summary.total) | round | int }}%</title></circle>
+              {% set seg.off = seg.off + len %}
+            {% endfor %}
+          </svg>
+          <div class="donut-centre">
+            <span class="donut-num">{{ summary.online }}<small>/{{ summary.total }}</small></span>
+            <span class="donut-cap">online</span>
+          </div>
+        </div>
+        <ul class="health-key">
+          {% for label, n, cls in parts if n or cls != 'is-wait' %}
+          <li class="{{ cls }}"><i></i><span class="k-label">{{ label }}</span>
+            <span class="k-num">{{ n }}</span>
+            <span class="k-pct">{{ (n * 100 / summary.total) | round | int }}%</span></li>
+          {% endfor %}
+          <li class="k-note">health checks every {{ check_interval }} min</li>
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+    <div class="figures">
+      <div class="stat">
+        <div class="stat-label">Online</div>
+        <div class="stat-value ok-text">{{ summary.online }}<small>/ {{ summary.total }}</small></div>
+      </div>
+      <div class="stat {{ 'stat-alert' if summary.offline }}">
+        <div class="stat-label">Down</div>
+        <div class="stat-value {{ 'bad-text' if summary.offline }}">{{ summary.offline }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Clicks today</div>
+        <div class="stat-value">{{ "{:,}".format(summary.clicks_today) }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Clicks total</div>
+        <div class="stat-value">{{ "{:,}".format(summary.clicks_total) }}</div>
       </div>
     </div>
   </div>
-  <div class="stat">
-    <div class="stat-label">Links tracked</div>
-    <div class="stat-value">{{ summary.total }}</div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if view == 'jobs' %}{% include "_jobs.html" %}{% else %}
+
+{# One tile per app. Down apps come first: they are why you looked. #}
+{% macro tile(r) %}
+{%- set up = r.link.enabled and r.check and r.check.ok -%}
+{%- set down = r.link.enabled and r.check and not r.check.ok -%}
+<article class="app{{ ' is-up' if up }}{{ ' is-down' if down }}{{ ' is-paused' if not r.link.enabled }}"
+         data-detail="detail-{{ r.link.id }}">
+  <div class="app-top">
+    {% if not r.link.enabled %}
+      <span class="status status-off"><span class="dot"></span>Paused</span>
+    {% elif r.check is none %}
+      <span class="status status-off"><span class="dot"></span>Waiting&hellip;</span>
+    {% elif r.check.ok %}
+      <span class="status status-ok"><span class="dot"></span>Online
+        {%- if r.check.status_code %} &middot; {{ r.check.status_code }}{% endif %}</span>
+    {% else %}
+      <span class="status status-bad"><span class="dot"></span>Down
+        {%- if r.check.status_code %} &middot; {{ r.check.status_code }}
+        {%- elif r.check.error %} &middot; {{ r.check.error }}{% endif %}</span>
+    {% endif %}
+    <span class="app-checked" title="last health check">
+      {%- if r.check %}{{ r.check.checked_at[5:16] }}{% else %}&mdash;{% endif %}</span>
   </div>
-  <div class="stat">
-    <div class="stat-label">Online</div>
-    <div class="stat-value ok-text">{{ summary.online }}</div>
+
+  {# the name is the keyboard way in; a click anywhere else on the tile works too #}
+  <h3 class="app-name"><button type="button" class="app-open">{{ r.link.name }}</button></h3>
+  <div class="short-link">/go/{{ r.link.slug }}</div>
+  <div class="link-url">&rarr; {{ r.link.url }}</div>
+
+  <dl class="app-figs">
+    <div>
+      <dt>Response</dt>
+      <dd class="fig-ms">{% if up %}{{ r.check.response_ms }}<small>ms</small>{% else %}&mdash;{% endif %}</dd>
+    </div>
+    <div>
+      <dt>Today</dt>
+      <dd>{{ "{:,}".format(r.today_clicks) }}<small>/ {{ r.today_visitors }}</small></dd>
+    </div>
+    <div>
+      <dt>Total</dt>
+      <dd>{{ "{:,}".format(r.total_clicks) }}<small>/ {{ r.total_visitors }}</small></dd>
+    </div>
+  </dl>
+
+  <div class="app-chart">
+    <div class="app-label"><span>clicks, 14 days</span><span>today</span></div>
+    {# One bar a day; today is indigo so "now" is findable. #}
+    <svg class="app-spark" viewBox="0 0 137 48" preserveAspectRatio="none"
+         role="img" aria-label="clicks per day, last 14 days">
+      {% for p in r.trend %}
+        {% set h = ((p.clicks / r.trend_max * 46) | round(1)) if p.clicks else 2 %}
+        <rect x="{{ loop.index0 * 10 }}" y="{{ 48 - h }}" width="7" height="{{ h }}"
+              class="{% if not p.clicks %}col-zero{% elif loop.last %}col-today{% endif %}">
+          <title>{{ p.day }} &middot; {{ p.clicks }} clicks</title></rect>
+      {% endfor %}
+    </svg>
   </div>
-  <div class="stat {{ 'stat-alert' if summary.offline }}">
-    <div class="stat-label">Down</div>
-    <div class="stat-value {{ 'bad-text' if summary.offline else '' }}">{{ summary.offline }}</div>
+
+  {% if r.startable and r.link.enabled %}
+  <div class="app-actions">
+    {% if up %}
+      <button class="btn btn-small" type="button" disabled
+              title="Already online - nothing to start">Start</button>
+    {% else %}
+      <form method="post" action="{{ url_for('start_link', link_id=r.link.id) }}">
+        <button class="btn btn-small" type="submit">Start</button>
+      </form>
+    {% endif %}
+    {# Restart = stop the old copy by its configured port, then start fresh.
+       Offered online or not: replacing a running old version is the point. #}
+    <form method="post"
+          action="{{ url_for('restart_link', link_id=r.link.id) }}"
+          onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">
+      <button class="btn btn-small" type="submit"
+              title="Stop the running copy and start a fresh one">Restart</button>
+    </form>
   </div>
-  <div class="stat">
-    <div class="stat-label">Clicks today</div>
-    <div class="stat-value">{{ "{:,}".format(summary.clicks_today) }}</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Clicks total</div>
-    <div class="stat-value">{{ "{:,}".format(summary.clicks_total) }}</div>
-  </div>
-</div>
+  {% endif %}
+</article>
+{% endmacro %}
 
 {% if rows %}
-<div class="table-wrap">
-<table class="links-table">
-  <thead>
-    <tr>
-      <th>Link</th>
-      <th>Status</th>
-      <th class="num">Response</th>
-      <th class="num">Today<span class="th-sub">clicks / people</span></th>
-      <th class="num">Total<span class="th-sub">clicks / people</span></th>
-      <th>Last 14 days</th>
-      <th>Last checked</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for r in rows %}
-    <tr class="{{ 'row-disabled' if not r.link.enabled }}">
-      <td class="cell-link">
-        <div class="link-name">{{ r.link.name }}</div>
-        <div class="short-link">/go/{{ r.link.slug }}</div>
-        <div class="link-url">&rarr; {{ r.link.url }}</div>
-      </td>
-      <td data-label="Status">
-        <div class="status-cell">
-        {% if not r.link.enabled %}
-          <span class="status status-off"><span class="dot"></span>Paused</span>
-        {% elif r.check is none %}
-          <span class="status status-off"><span class="dot"></span>Waiting&hellip;</span>
-        {% elif r.check.ok %}
-          <span class="status status-ok"><span class="dot"></span>Online
-            {%- if r.check.status_code %} &middot; {{ r.check.status_code }}{% endif %}</span>
-        {% else %}
-          <span class="status status-bad"><span class="dot"></span>Down
-            {%- if r.check.status_code %} &middot; {{ r.check.status_code }}
-            {%- elif r.check.error %} &middot; {{ r.check.error }}{% endif %}</span>
-        {% endif %}
-        {% if r.startable and r.link.enabled %}
-          {% if r.check and r.check.ok %}
-            <button class="btn btn-small" type="button" disabled
-                    title="Already online - nothing to start">Start</button>
-          {% else %}
-            <form method="post"
-                  action="{{ url_for('start_link', link_id=r.link.id) }}">
-              <button class="btn btn-small" type="submit">Start</button>
-            </form>
-          {% endif %}
-          {# Restart = stop the old copy by its configured port, then start fresh.
-             Offered online or not: replacing a running old version is the point. #}
-          <form method="post"
-                action="{{ url_for('restart_link', link_id=r.link.id) }}"
-                onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">
-            <button class="btn btn-small" type="submit"
-                    title="Stop the running copy and start a fresh one">Restart</button>
-          </form>
-        {% endif %}
-        </div>
-      </td>
-      <td class="num" data-label="Response">
-        {% if r.check and r.check.ok %}
-          {# meter is capped at 400 ms: that is the range internal apps
-             actually live in, so differences stay visible #}
-          {% set msw = [[(r.check.response_ms / 4) | round | int, 100] | min, 6] | max %}
-          <span class="ms">
-            <span>{{ r.check.response_ms }} ms</span>
-            <span class="ms-bar"><span class="ms-fill" style="width: {{ msw }}%"></span></span>
-          </span>
-        {% else %}&mdash;{% endif %}
-      </td>
-      <td class="num" data-label="Today"><span>{{ "{:,}".format(r.today_clicks) }}
-        <span class="dim">/ {{ r.today_visitors }}</span></span></td>
-      <td class="num" data-label="Total"><span>{{ "{:,}".format(r.total_clicks) }}
-        <span class="dim">/ {{ r.total_visitors }}</span></span></td>
-      <td data-label="Last 14 days">
-        {# Each day is an extruded column: lit top face, front face, shaded
-           right face. Today's column is cyan so "now" is findable. #}
-        <svg class="spark" width="134" height="44" viewBox="0 0 134 44"
-             role="img" aria-label="clicks per day, last 14 days">
-          {% for p in r.trend %}
-            {% set h = ((p.clicks / r.trend_max * 26) | round(1)) if p.clicks else 2 %}
-            {% set x = loop.index0 * 9 %}
-            {% set y = 38 - h %}
-            <g class="{% if not p.clicks %}col-zero{% elif loop.last %}col-today{% endif %}">
-              <title>{{ p.day }} &middot; {{ p.clicks }} clicks</title>
-              <polygon class="col-top"
-                       points="{{ x }},{{ y }} {{ x + 4 }},{{ y - 4 }} {{ x + 11 }},{{ y - 4 }} {{ x + 7 }},{{ y }}"/>
-              <polygon class="col-side"
-                       points="{{ x + 7 }},{{ y }} {{ x + 11 }},{{ y - 4 }} {{ x + 11 }},34 {{ x + 7 }},38"/>
-              <rect class="col-face" x="{{ x }}" y="{{ y }}" width="7" height="{{ h }}"/>
-            </g>
-          {% endfor %}
-        </svg>
-      </td>
-      <td class="dim" data-label="Last checked">
-        {% if r.check %}{{ r.check.checked_at[5:16] }}{% else %}&mdash;{% endif %}
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="table-head">
+  <h2>Apps</h2>
+  <span class="count-note">down first &middot; clicks counted at /go/</span>
 </div>
+<div class="apps">
+  {% for r in rows if r.link.enabled and r.check and not r.check.ok %}{{ tile(r) }}{% endfor %}
+  {% for r in rows if not (r.link.enabled and r.check and not r.check.ok) %}{{ tile(r) }}{% endfor %}
+</div>
+{% for r in rows %}{% include "_link_detail.html" %}{% endfor %}
 {% else %}
 <div class="empty">
   <p>No links yet. Add your first internal link on the
@@ -187,5 +264,42 @@
 {% endif %}
 
 {% endif %}
+<script>
+(function () {
+  // A tile opens its detail pop-up - unless the click was on one of its
+  // own controls (Start, Restart).
+  document.addEventListener('click', function (e) {
+    var tile = e.target.closest('[data-detail]');
+    if (tile && !e.target.closest('button:not(.app-open), a, form')) {
+      var dlg = document.getElementById(tile.dataset.detail);
+      if (dlg && !dlg.open) dlg.showModal();
+    }
+    // a click on the dim area around the pop-up lands on the dialog itself
+    if (e.target.matches && e.target.matches('dialog.detail')) e.target.close();
+  });
 
+  // Reload every minute for fresh status, but never under an open pop-up:
+  // if one is open when the minute is up, reload as soon as it closes.
+  var due = false;
+  function reloadIfFree() {
+    if (document.querySelector('dialog[open]')) { due = true; return; }
+    location.reload();
+  }
+  setInterval(reloadIfFree, 60000);
+  document.querySelectorAll('dialog.detail').forEach(function (d) {
+    d.addEventListener('close', function () {
+      if (location.hash === '#' + d.id) history.replaceState(null, '', location.pathname + location.search);
+      if (due) reloadIfFree();
+    });
+  });
+
+  // /#detail-3 opens that link's pop-up straight away, so one can be shared
+  function openFromHash() {
+    var target = location.hash && document.getElementById(location.hash.slice(1));
+    if (target && target.matches('dialog.detail') && !target.open) target.showModal();
+  }
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
+})();
+</script>
 {% endblock %}

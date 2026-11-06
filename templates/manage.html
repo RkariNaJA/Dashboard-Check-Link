@@ -1,16 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Manage links · Link Watch{% endblock %}
-{% block content %}
-
-<div class="page-head">
-  <div>
-    <h1>Manage links</h1>
-    <p class="page-note">
-      Every link here hands out a short <code>/go/</code> address. Share that,
-      not the raw one, and the clicks land on the dashboard.
-    </p>
+{% block band %}
+<section class="band-head">
+  <div class="wrap">
+    <div>
+      <h1>Manage links</h1>
+      <p class="band-note">
+        Every link here hands out a short <code>/go/</code> address. Share that,
+        not the raw one, and the clicks land on the dashboard.
+      </p>
+    </div>
   </div>
-</div>
+</section>
+{% endblock %}
+
+{% block content %}
 
 <section class="card">
   <h2>Add a link</h2>
@@ -41,7 +45,7 @@
 
 <div class="table-head">
   <h2>Your links</h2>
-  {% if links %}<span class="stat-foot">{{ links|length }} total</span>{% endif %}
+  {% if links %}<span class="count-note">{{ links|length }} total</span>{% endif %}
 </div>
 
 {% if links %}

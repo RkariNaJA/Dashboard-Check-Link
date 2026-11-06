@@ -1,0 +1,144 @@
+{# One link's detail pop-up. Included once per row from dashboard.html with
+   `r` in scope; opened by clicking its tile. Everything here was already
+   loaded for the tiles, plus r.history (newest first) and r.uptime. #}
+{%- set up = r.link.enabled and r.check and r.check.ok -%}
+{%- set down = r.link.enabled and r.check and not r.check.ok -%}
+{%- set short = request.url_root.rstrip('/') ~ '/go/' ~ r.link.slug -%}
+<dialog class="detail{{ ' is-up' if up }}{{ ' is-down' if down }}" id="detail-{{ r.link.id }}"
+        aria-labelledby="detail-{{ r.link.id }}-title">
+  <div class="detail-body">
+
+    <div class="detail-head">
+      <div>
+        {% if not r.link.enabled %}
+          <span class="status status-off"><span class="dot"></span>Paused</span>
+        {% elif r.check is none %}
+          <span class="status status-off"><span class="dot"></span>Waiting for the first check</span>
+        {% elif r.check.ok %}
+          <span class="status status-ok"><span class="dot"></span>Online
+            {%- if r.check.status_code %} &middot; {{ r.check.status_code }}{% endif %}</span>
+        {% else %}
+          <span class="status status-bad"><span class="dot"></span>Down
+            {%- if r.check.status_code %} &middot; {{ r.check.status_code }}
+            {%- elif r.check.error %} &middot; {{ r.check.error }}{% endif %}</span>
+        {% endif %}
+        <h2 id="detail-{{ r.link.id }}-title">{{ r.link.name }}</h2>
+      </div>
+      <form method="dialog">
+        <button class="btn detail-x" aria-label="Close">&times;</button>
+      </form>
+    </div>
+
+    <dl class="detail-links">
+      <div>
+        <dt>Short link</dt>
+        <dd><span class="short-link">{{ short }}</span>
+          <button class="btn btn-small btn-copy" type="button" data-link="{{ short }}">Copy</button></dd>
+      </div>
+      <div>
+        <dt>Destination</dt>
+        <dd><span class="link-url">{{ r.link.url }}</span>
+          {# straight to the app, so opening it from here is not counted #}
+          <a class="btn btn-small" href="{{ r.link.url }}" target="_blank" rel="noopener"
+             title="Opens the app directly - not counted as a click">Open app</a></dd>
+      </div>
+    </dl>
+
+    <dl class="app-figs detail-figs">
+      <div>
+        <dt>Response</dt>
+        <dd class="fig-ms">{% if up %}{{ r.check.response_ms }}<small>ms</small>{% else %}&mdash;{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Uptime</dt>
+        <dd>{% if r.uptime is not none %}{{ r.uptime }}<small>%</small>{% else %}&mdash;{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Today</dt>
+        <dd>{{ "{:,}".format(r.today_clicks) }}<small>/ {{ r.today_visitors }}</small></dd>
+      </div>
+      <div>
+        <dt>Total</dt>
+        <dd>{{ "{:,}".format(r.total_clicks) }}<small>/ {{ r.total_visitors }}</small></dd>
+      </div>
+    </dl>
+
+    <section class="detail-sec">
+      <h3>Health checks
+        <span>last {{ r.history | length }} &middot; one every {{ check_interval }} min</span></h3>
+      {# oldest on the left, now on the right; empty slots until history fills #}
+      <div class="strip" role="img"
+           aria-label="{{ r.uptime if r.uptime is not none else 0 }}% of the last {{ r.history | length }} checks passed">
+        {% for _ in range(history_slots - r.history | length) %}<span class="is-empty"></span>{% endfor %}
+        {% for c in r.history | reverse %}
+          <span class="{{ 'is-ok' if c.ok else 'is-bad' }}"
+                title="{{ c.checked_at[5:16] }} &middot; {{ 'OK' if c.ok else 'Down' }}
+                  {%- if c.status_code %} {{ c.status_code }}{% endif %}
+                  {%- if c.ok and c.response_ms is not none %} &middot; {{ c.response_ms }} ms{% endif %}
+                  {%- if not c.ok and c.error %} &middot; {{ c.error }}{% endif %}"></span>
+        {% endfor %}
+      </div>
+      <div class="axis"><span>older</span><span>now</span></div>
+    </section>
+
+    <section class="detail-sec">
+      <h3>Clicks per day <span>last {{ r.trend | length }} days</span></h3>
+      {% if r.trend | sum(attribute='clicks') %}
+      <svg class="detail-chart" viewBox="0 0 279 96" preserveAspectRatio="none"
+           role="img" aria-label="clicks per day, last {{ r.trend | length }} days">
+        {% for p in r.trend %}
+          {% set h = ((p.clicks / r.trend_max * 92) | round(1)) if p.clicks else 2 %}
+          <rect x="{{ loop.index0 * 20 }}" y="{{ 96 - h }}" width="15" height="{{ h }}"
+                class="{% if not p.clicks %}col-zero{% elif loop.last %}col-today{% endif %}">
+            <title>{{ p.day }} &middot; {{ p.clicks }} clicks</title></rect>
+        {% endfor %}
+      </svg>
+      <div class="axis"><span>{{ r.trend[0].day[5:] }}</span><span>today</span></div>
+      {% else %}
+      <p class="detail-empty">No clicks through /go/{{ r.link.slug }} in the last {{ r.trend | length }} days.</p>
+      {% endif %}
+    </section>
+
+    {% if r.history %}
+    <section class="detail-sec">
+      <h3>Recent checks</h3>
+      <table class="detail-table">
+        <thead><tr><th>Checked</th><th>Result</th><th class="num">Response</th><th>Detail</th></tr></thead>
+        <tbody>
+        {% for c in r.history[:8] %}
+          <tr>
+            <td class="dim">{{ c.checked_at[5:16] }}</td>
+            <td>{% if c.ok %}<span class="status status-ok"><span class="dot"></span>OK</span>
+                {% else %}<span class="status status-bad"><span class="dot"></span>Down</span>{% endif %}</td>
+            <td class="num">{% if c.ok and c.response_ms is not none %}{{ c.response_ms }} ms{% else %}&mdash;{% endif %}</td>
+            <td class="dim">{{ c.status_code or c.error or '' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <div class="detail-actions">
+      {% if r.startable and r.link.enabled %}
+        {% if up %}
+          <button class="btn" type="button" disabled
+                  title="Already online - nothing to start">Start</button>
+        {% else %}
+          <form method="post" action="{{ url_for('start_link', link_id=r.link.id) }}">
+            <button class="btn btn-primary" type="submit">Start</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('restart_link', link_id=r.link.id) }}"
+              onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">
+          <button class="btn" type="submit">Restart</button>
+        </form>
+      {% endif %}
+      <a class="btn" href="{{ url_for('edit_link', link_id=r.link.id) }}">Edit link</a>
+      <form method="dialog" class="detail-close">
+        <button class="btn">Close</button>
+      </form>
+    </div>
+
+  </div>
+</dialog>

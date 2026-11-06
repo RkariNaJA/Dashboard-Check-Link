@@ -31,6 +31,7 @@ app = Flask(__name__)
 app.secret_key = "internal-link-dashboard"
 
 TREND_DAYS = 14
+HISTORY_CHECKS = 48        # the detail pop-up's status strip and uptime
 RESERVED_SLUGS = {"go", "manage", "links", "refresh", "static", "services",
                   "jobs"}
 
@@ -115,9 +116,11 @@ def load_dashboard_rows():
                 """SELECT day, SUM(hits) FROM daily_hits
                    WHERE link_id = ? AND day >= ? GROUP BY day""",
                 (lid, days[0])).fetchall())
-            latest = conn.execute(
+            # newest first; the detail pop-up draws these as a strip
+            history = conn.execute(
                 """SELECT * FROM checks WHERE link_id = ?
-                   ORDER BY checked_at DESC LIMIT 1""", (lid,)).fetchone()
+                   ORDER BY checked_at DESC LIMIT ?""",
+                (lid, HISTORY_CHECKS)).fetchall()
             rows.append({
                 "link": link,
                 "total_clicks": totals["clicks"],
@@ -126,7 +129,10 @@ def load_dashboard_rows():
                 "today_visitors": today_row["visitors"],
                 "trend": [{"day": d, "clicks": per_day.get(d, 0)} for d in days],
                 "trend_max": max([per_day.get(d, 0) for d in days] + [1]),
-                "check": latest,
+                "check": history[0] if history else None,
+                "history": history,
+                "uptime": (round(sum(c["ok"] for c in history) * 100
+                                 / len(history)) if history else None),
                 "startable": link["slug"] in PROCESSES,
             })
     return rows
@@ -176,7 +182,8 @@ def dashboard():
                            job_rows=job_rows,
                            job_summary=jobs.summarize(job_rows,
                                                       db.job_runs_since(24)),
-                           check_interval=CHECK_MIN)
+                           check_interval=CHECK_MIN,
+                           history_slots=HISTORY_CHECKS)
 
 
 @app.route("/manage")
