@@ -1,0 +1,187 @@
+/* Link Watch - the per-link detail pop-up, and the tile that opens it.
+   Loaded by the dashboard only. Tokens in tokens.css; the figures, status
+   pills and short-link styles it reuses are in components.css. */
+
+/* ---- the tile is the way in ------------------------------------------ */
+
+.app[data-detail] {
+  cursor: pointer;
+  transition: border-color var(--m-out) var(--m-ease), transform 180ms var(--m-ease);
+}
+.app[data-detail]:hover { transform: translateY(-2px); }
+.app-open {
+  all: unset;
+  cursor: pointer;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+  transition: background-size var(--m-out) var(--m-ease);
+}
+.app[data-detail]:hover .app-open { background-size: 100% 1px; transition-duration: var(--m-in); }
+.app-open:focus-visible { outline: 2px solid var(--accent-mark); outline-offset: 4px;
+                          border-radius: var(--r-sm); }
+
+/* ---- the pop-up --------------------------------------------------------- */
+
+dialog.detail {
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  margin: auto;                        /* centred; the global reset zeroes it */
+  padding: 0;                          /* clicks on padding would read as backdrop */
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  overflow: auto;
+  overflow-x: hidden;
+}
+dialog.detail:focus-visible { outline: none; }   /* focus goes to its controls */
+dialog.detail::backdrop {
+  background: rgba(4, 4, 14, .72);
+  backdrop-filter: blur(3px);
+}
+dialog.detail[open] { animation: detail-in 200ms var(--m-ease); }
+@keyframes detail-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+/* the lit top edge, in the link's status colour, like its tile */
+dialog.detail::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  display: block;
+  height: 3px;
+  background: var(--wait);
+  z-index: 1;
+}
+dialog.detail.is-up::before   { background: var(--ok);  box-shadow: 0 0 18px 1px var(--ok-glow); }
+dialog.detail.is-down::before { background: var(--bad); box-shadow: 0 0 22px 2px var(--bad-glow); }
+
+.detail-body { padding: var(--s5) var(--s6) var(--s6); }
+
+.detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.detail-head h2 {
+  font-size: 30px;
+  letter-spacing: -0.03em;
+  margin: var(--s3) 0 0;
+}
+.detail-x { width: 40px; padding: 0; font-size: 22px; line-height: 1; flex: none; }
+
+.detail-links { margin: var(--s5) 0 0; display: grid; gap: var(--s3); }
+.detail-links > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s3);
+}
+.detail-links dt { font-size: 13px; font-weight: 500; color: var(--muted); }
+.detail-links dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-width: 0;
+}
+.detail-links .short-link, .detail-links .link-url { margin: 0; font-size: 14px; min-width: 0; }
+.detail-links .btn { flex: none; margin: 0; }
+
+.detail-figs { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 0; }
+
+.detail-sec { margin-top: var(--s6); }
+.detail-sec h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: var(--s3);
+}
+.detail-sec h3 span { font: 13px var(--mono); color: var(--muted); }
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s2);
+  font: 13px var(--mono);
+  color: var(--muted);
+}
+
+/* the health strip: one tick per check, oldest left */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(48, minmax(0, 1fr));
+  gap: 2px;
+  height: 30px;
+}
+.strip span { border-radius: 2px; background: var(--wait); }
+.strip .is-ok  { background: var(--ok); }
+.strip .is-bad { background: var(--bad); box-shadow: 0 0 8px var(--bad-glow); }
+.strip .is-empty { background: var(--sunk); }
+
+.detail-chart { display: block; width: 100%; height: 110px; }
+.detail-chart rect { fill: var(--ink-2); opacity: .85; }
+.detail-chart .col-zero  { fill: var(--line-2); opacity: 1; }
+.detail-chart .col-today { fill: var(--accent-mark); opacity: 1; }
+
+.detail-table { width: 100%; border-collapse: collapse; }
+.detail-table th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 0 var(--s3) var(--s2) 0;
+  border-bottom: 1px solid var(--line-2);
+}
+.detail-table td {
+  padding: var(--s2) var(--s3) var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.detail-table .status { height: 24px; }
+.detail-table .num { font-size: 15px; }
+.detail-table th.num { font-size: 13px; font-weight: 500; text-align: right; }
+.detail-empty {
+  padding: var(--s4);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-md);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s6);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--line);
+}
+.detail-actions form { display: flex; }
+.detail-actions .detail-close { margin-left: auto; }
+
+@media (max-width: 640px) {
+  dialog.detail { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .detail-body { padding: var(--s4) var(--s4) var(--s5); }
+  .detail-head h2 { font-size: 24px; }
+  .detail-links > div { grid-template-columns: minmax(0, 1fr); gap: var(--s1); }
+  .detail-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-figs > div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .detail-figs dd { font-size: 26px; }
+  .strip { height: 24px; gap: 1px; }
+  /* the error already shows in the status pill at the top */
+  .detail-table th:nth-child(4), .detail-table td:nth-child(4) { display: none; }
+  .detail-actions > * , .detail-actions form .btn { flex: 1; }
+  .detail-actions .detail-close { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.detail[open] { animation: none; }
+  .app[data-detail]:hover { transform: none; }
+}

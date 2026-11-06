@@ -43,10 +43,12 @@ User instantly lands on:   http://SERVERNAME:5000/   (your real app)
 Your apps need **no changes at all** — the dashboard never touches them, it just owns the address
 people click.
 
-![The dashboard: 5 links tracked, 4 online, 1 down, with clicks, response times and Start/Restart buttons](docs/images/link-watch-dashboard.jpg)
+![The dashboard: 7 of 8 apps online and 1 down, a health donut, and one tile per app with clicks, response time and Start/Restart buttons](docs/images/link-watch-dashboard.jpg)
 
-<sub>Seven internal tools tracked — clicks today and all-time, how many different people, response
-time, and a 14-day bar chart per link. The destination addresses are blurred; the `/go/` short
+<sub>Eight internal tools tracked — the headline and donut say how many are up, and each app gets a
+tile with its status, response time, clicks today and all-time, how many different people, and a
+14-day bar chart. Down apps come first. Click a tile for its detail pop-up: uptime, a strip of
+recent health checks, and Start/Restart. The destination addresses are blurred; the `/go/` short
 names are not secret.</sub>
 
 ---

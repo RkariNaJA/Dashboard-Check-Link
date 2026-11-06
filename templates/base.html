@@ -3,46 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0F172A">
+<meta name="theme-color" content="#07071A">
 <title>{% block title %}Link Watch{% endblock %}</title>
 {# Favicon is inlined, not a file: this server has no internet and the tab
-   icon is part of the identity. Same extruded mark as the header. #}
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236366F1'/%3E%3Cstop offset='1' stop-color='%2322D3EE'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='5' y='6' width='21' height='21' rx='6' fill='%23312E81'/%3E%3Crect x='2' y='1' width='21' height='21' rx='6' fill='url(%23g)'/%3E%3Cpath d='M5.5 12.4h2.3l1.7-4.2 2.3 6.2 1.7-3.6 1 1.4h4.8' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+   icon is part of the identity. Same mark as the header. #}
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='5' fill='%235E5CF0'/%3E%3Cpath d='M4 15h4l2.5-6 4 11 2.5-5h7' fill='none' stroke='%23FFFFFF' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preload" href="{{ url_for('static', filename='fonts/Geist-Variable.woff2') }}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='components.css') }}">
 {% block head %}{% endblock %}
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
-    <a class="brand" href="{{ url_for('dashboard') }}">
-      {# An extruded slab: dark block behind, lit gradient face in front. #}
-      <svg class="brand-mark" width="30" height="30" viewBox="0 0 28 28" aria-hidden="true">
-        <defs>
-          <linearGradient id="lw-face" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#818CF8"/>
-            <stop offset="0.5" stop-color="#4F46E5"/>
-            <stop offset="1" stop-color="#06B6D4"/>
-          </linearGradient>
-        </defs>
-        <rect x="5" y="6" width="21" height="21" rx="6" fill="#312E81"/>
-        <rect x="2" y="1" width="21" height="21" rx="6" fill="url(#lw-face)"/>
-        <path d="M5.5 12.4h2.3l1.7-4.2 2.3 6.2 1.7-3.6 1 1.4h4.8"
-              fill="none" stroke="#fff" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <span class="brand-name">Link Watch</span>
-      <span class="brand-sub">internal link dashboard</span>
-    </a>
-    <nav class="nav">
-      <a href="{{ url_for('dashboard') }}"
-         class="{{ 'active' if request.endpoint == 'dashboard' }}">Dashboard</a>
-      <a href="{{ url_for('manage') }}"
-         class="{{ 'active' if request.endpoint in ('manage', 'edit_link') }}">Manage links</a>
-    </nav>
-  </div>
-</header>
+<div class="band">
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="{{ url_for('dashboard') }}">
+        {# An indigo plate with a pulse line: the one mark, header and tab. #}
+        <svg class="brand-mark" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+          <rect width="28" height="28" rx="5" fill="#5E5CF0"/>
+          <path d="M4 15h4l2.5-6 4 11 2.5-5h7" fill="none" stroke="#FFFFFF"
+                stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="brand-name">Link Watch</span>
+        <span class="brand-sub">internal apps</span>
+      </a>
+      <nav class="nav">
+        <a href="{{ url_for('dashboard') }}"
+           class="{{ 'active' if request.endpoint in ('dashboard', 'job_detail') }}">Dashboard</a>
+        <a href="{{ url_for('manage') }}"
+           class="{{ 'active' if request.endpoint in ('manage', 'edit_link') }}">Manage links</a>
+      </nav>
+    </div>
+  </header>
+  {% block band %}{% endblock %}
+</div>
 
 <main class="page">
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -54,8 +49,10 @@
 </main>
 
 <footer class="footer">
-  Clicks are counted by the short /go/ links &middot; status from periodic
-  health checks &middot; data stays on this server.
+  <div class="wrap">
+    Clicks are counted by the short /go/ links &middot; status from periodic
+    health checks &middot; data stays on this server.
+  </div>
 </footer>
 
 <script>
@@ -63,8 +60,11 @@ document.addEventListener('click', function (e) {
   var btn = e.target.closest('.btn-copy');
   if (!btn) return;
   var text = btn.dataset.link;
-  function done() { btn.textContent = 'Copied!';
-                    setTimeout(function () { btn.textContent = 'Copy'; }, 1500); }
+  function done() {
+    btn.textContent = 'Copied'; btn.classList.add('is-done');
+    setTimeout(function () { btn.textContent = 'Copy';
+                             btn.classList.remove('is-done'); }, 1600);
+  }
   function fallback() {          // plain http on the intranet, or no permission
     var ta = document.createElement('textarea');
     ta.value = text; document.body.appendChild(ta);
