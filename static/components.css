@@ -293,6 +293,61 @@ td.dim { font-family: var(--mono); white-space: nowrap; }
 /* One tile per app, down ones first. The top edge is lit in the app's
    status colour, so the wall reads from across the room. */
 
+/* ---- group boxes: the landing view, one per team ------------------- */
+/* Same lit top edge as an app tile, so a closed group with a down app
+   still reads red from across the room. */
+
+.groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s4);
+}
+@media (max-width: 1100px) { .groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px)  { .groups { grid-template-columns: minmax(0, 1fr); } }
+.group-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s5);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color var(--m-out) var(--m-ease);
+}
+.group-box:hover { border-color: var(--line-2); transition-duration: var(--m-in); }
+.group-box::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 3px;
+  background: var(--wait);
+}
+.group-box.is-up::before   { background: var(--ok);  box-shadow: 0 0 18px 1px var(--ok-glow); }
+.group-box.is-down::before { background: var(--bad); box-shadow: 0 0 22px 2px var(--bad-glow); }
+.group-box.is-down {
+  border-color: color-mix(in srgb, var(--bad) 55%, transparent);
+  background: linear-gradient(180deg, var(--bad-soft), transparent 55%), var(--panel);
+}
+.group-box.is-open { border-color: var(--accent-mark); box-shadow: 0 0 0 1px var(--accent-mark); }
+.group-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+.group-name { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.2; }
+.group-chev { font: 22px/1 var(--mono); color: var(--muted); }
+.group-figs { display: flex; align-items: center; justify-content: space-between;
+              gap: var(--s3); flex-wrap: wrap; }
+.group-num { font-size: 30px; font-weight: 500; letter-spacing: -0.03em;
+             line-height: 1.1; font-variant-numeric: tabular-nums; }
+.group-num small { font-size: 14px; font-weight: 400; letter-spacing: 0;
+                   color: var(--muted); margin-left: 3px; }
+.group-box.is-up .group-num { color: var(--ok); }
+.group-fleet { margin-top: 0; height: 8px; }
+.group-count { font: 13px var(--mono); color: var(--muted); }
+
+.app-group { margin-top: var(--s7); }
+
 .apps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,0 +1,5 @@
+{# Suggestions for the Group field, so a team is picked rather than retyped
+   (a typo would start a new dashboard section). Needs `group_names`. #}
+<datalist id="group-names">
+  {% for name in group_names %}<option value="{{ name }}">{% endfor %}
+</datalist>

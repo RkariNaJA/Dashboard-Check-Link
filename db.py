@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS links (
     slug        TEXT NOT NULL UNIQUE,   -- short-link name: /go/<slug>
     url         TEXT NOT NULL,          -- real destination
     enabled     INTEGER NOT NULL DEFAULT 1,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    group_name  TEXT NOT NULL DEFAULT ''   -- dashboard section; '' = Other
 );
 
 -- One row per link / day / visitor IP (clicks counted by the /go redirect)
@@ -63,6 +64,13 @@ def get_conn():
 def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        # A data.db made before groups existed lacks the column, and
+        # CREATE TABLE IF NOT EXISTS will not add it. Add it in place so the
+        # server keeps its links and click history.
+        columns = {r["name"] for r in conn.execute("PRAGMA table_info(links)")}
+        if "group_name" not in columns:
+            conn.execute("ALTER TABLE links "
+                         "ADD COLUMN group_name TEXT NOT NULL DEFAULT ''")
 
 
 def record_click(link_id, day, ip):
@@ -74,6 +82,14 @@ def record_click(link_id, day, ip):
                DO UPDATE SET hits = hits + 1""",
             (link_id, day, ip),
         )
+
+
+def groups_in_use():
+    """Group names already given to links, to suggest on the forms."""
+    with get_conn() as conn:
+        return [r[0] for r in conn.execute(
+            """SELECT DISTINCT group_name FROM links WHERE group_name != ''
+               ORDER BY group_name COLLATE NOCASE""")]
 
 
 def seed_samples(port):

@@ -1,0 +1,2 @@
+{# Inside a dashboard POST form: come back to the open group afterwards. #}
+{% if open_group %}<input type="hidden" name="group" value="{{ open_group.name }}">{% endif %}

@@ -33,8 +33,15 @@
         <span class="hint">optional &middot; made from the name if empty</span></label>
       <input id="slug" name="slug" class="input-mono" placeholder="forming-box">
     </div>
+    <div class="field">
+      <label for="group">Group
+        <span class="hint">dashboard section &middot; empty = Other</span></label>
+      <input id="group" name="group" list="group-names" maxlength="60"
+             placeholder="Mer Team">
+    </div>
     <button class="btn btn-primary" type="submit">Add link</button>
   </form>
+  {% include "_group_names.html" %}
   <p class="page-note">
     Adding a link creates a <strong>short link</strong> like
     <code>{{ request.url_root }}go/forming-box</code>. Share the short link with
@@ -52,7 +59,7 @@
 <div class="table-wrap">
 <table class="links-table manage-table">
   <thead>
-    <tr><th>Name</th><th>Short link (share this)</th><th>Destination</th>
+    <tr><th>Name</th><th>Group</th><th>Short link (share this)</th><th>Destination</th>
         <th>State</th><th></th></tr>
   </thead>
   <tbody>
@@ -60,6 +67,7 @@
     {% set short = request.url_root.rstrip('/') ~ '/go/' ~ link.slug %}
     <tr class="{{ 'row-disabled' if not link.enabled }}">
       <td class="link-name cell-link">{{ link.name }}</td>
+      <td data-label="Group">{{ link.group_name or '—' }}</td>
       <td data-label="Short link">
         <div class="short-cell">
           <span class="short-link">{{ short }}</span>

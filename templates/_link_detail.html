@@ -125,12 +125,12 @@
           <button class="btn" type="button" disabled
                   title="Already online - nothing to start">Start</button>
         {% else %}
-          <form method="post" action="{{ url_for('start_link', link_id=r.link.id) }}">
+          <form method="post" action="{{ url_for('start_link', link_id=r.link.id) }}">{% include "_keep_group.html" %}
             <button class="btn btn-primary" type="submit">Start</button>
           </form>
         {% endif %}
         <form method="post" action="{{ url_for('restart_link', link_id=r.link.id) }}"
-              onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">
+              onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">{% include "_keep_group.html" %}
           <button class="btn" type="submit">Restart</button>
         </form>
       {% endif %}
