@@ -31,11 +31,18 @@
         <span class="hint">changing it breaks links people already saved</span></label>
       <input id="slug" name="slug" class="input-mono" value="{{ link.slug }}">
     </div>
+    <div class="field">
+      <label for="group">Group
+        <span class="hint">dashboard section &middot; empty = Other</span></label>
+      <input id="group" name="group" list="group-names" maxlength="60"
+             value="{{ link.group_name }}" placeholder="Mer Team">
+    </div>
     <div class="actions">
       <button class="btn btn-primary" type="submit">Save changes</button>
       <a class="btn" href="{{ url_for('manage') }}">Cancel</a>
     </div>
   </form>
+  {% include "_group_names.html" %}
 </section>
 
 {% endblock %}

@@ -77,7 +77,8 @@ def test_each_link_gets_a_detail_dialog(client, temp_db):
     lid = add_link(temp_db)
     add_check(temp_db, lid, "2026-11-06 09:30:00", 0, error="ConnectionError")
 
-    page = client.get("/").get_data(as_text=True)
+    # tiles show inside an open group; a link with no group is in "Other"
+    page = client.get("/?group=Other").get_data(as_text=True)
 
     assert '<dialog class="detail is-down"' in page          # lit red, like its tile
     assert f'id="detail-{lid}"' in page

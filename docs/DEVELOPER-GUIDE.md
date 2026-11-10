@@ -117,8 +117,9 @@ Add one `[process:<name>]` section per app at the bottom of `config.ini`:
 ```ini
 [process:my-app]
 link    = my-app
-command = npm run dev
+command = py .\src\app.py
 cwd     = D:\Path\To\my-app
+port    = 9070
 ```
 
 | Key | Meaning |
@@ -127,6 +128,16 @@ cwd     = D:\Path\To\my-app
 | `link` | the `/go/<slug>` name of the link this app sits behind |
 | `command` | exactly what you would type in the terminal |
 | `cwd` | the folder you would type it in |
+| `port` | *(optional, recommended)* the port the app listens on. With it, Start refuses to launch over an old copy, and **Restart** can stop that copy first. Without it, Restart can only start |
+
+**Adding a new app — that is all it takes. No code changes:**
+
+1. Add its `[process:<name>]` section to `config.ini`.
+2. Restart the dashboard — `config.ini` is only read at startup.
+3. Make sure the link exists on **Manage links** with a slug that matches
+   `link =` (leaving the short link blank turns `My App` into `my-app`).
+
+The Start and Restart buttons then appear on that link.
 
 **Where to find the slug:** it is the `/go/...` line shown under each link
 name on the dashboard. `http://SERVERNAME:8090/go/my-app` → the slug is
@@ -184,6 +195,18 @@ file tells you why it did not.
 > The status check is always **live**, never the last saved result. Right
 > after a reboot the newest stored check is stale and still says "online",
 > which would refuse to start exactly the apps this button exists for.
+
+### What happens when you click Restart
+
+Start never replaces a copy that is already running. To load a new version
+(new files copied to the server), use **Restart**. For each process behind
+the link:
+
+- **with a `port`:** it stops whatever is listening on that port (and its
+  child processes), waits for the port to free up, then starts fresh. It
+  refuses to stop the dashboard itself or a Windows system process.
+- **without a `port`:** there is no way to find the old copy, so it only
+  starts — and the message says so. Add a `port` to fix that.
 
 ### Checking your configuration
 
@@ -399,9 +422,11 @@ right app answered", and re-check the titles after any restart.
 | `[process:<name>] link` | The `/go/<slug>` name of the link this app is behind | — |
 | `[process:<name>] command` | Exactly what you would type in the terminal to start it | — |
 | `[process:<name>] cwd` | The folder to run that command in | — |
+| `[process:<name>] port` | *(optional)* Port the app listens on — lets Start detect an old copy and Restart stop it | none |
 
-A `[process:...]` section missing any of the three keys is ignored, with a
-message at startup saying which section was skipped. See **"Start buttons"**
+A `[process:...]` section missing `link`, `command` or `cwd`, or with a
+`port` that is not a number, is ignored, with a message at startup saying
+which section was skipped. See **"Start buttons"**
 above for the full explanation.
 
 ---

@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import (Flask, flash, redirect, render_template, request, url_for)
 
 import db
+import groups
 import jobs
 import runner
 from collector import check_one_link, run_health_checks
@@ -26,6 +27,7 @@ HOST = config.get("server", "host", fallback="0.0.0.0")
 PORT = config.getint("server", "port", fallback=8090)
 JOBS = jobs.load_jobs(config)
 JOB_TOKEN = config.get("jobs", "token", fallback="").strip()
+GROUP_ORDER = groups.load_order(config)
 
 app = Flask(__name__)
 app.secret_key = "internal-link-dashboard"
@@ -173,12 +175,21 @@ def go(slug):
 
 @app.route("/")
 def dashboard():
-    """Links and jobs share one page - two views of the same question."""
+    """Links and jobs share one page - two views of the same question.
+
+    The links view lands on one box per group; ?group=<name> also shows
+    that group's app tiles. It lives in the URL so the minute reload keeps
+    it open.
+    """
     view = "jobs" if request.args.get("view") == "jobs" else "links"
     rows = load_dashboard_rows()
+    sections = groups.group_rows(rows, GROUP_ORDER)
     job_rows = jobs.build_rows(JOBS, db.latest_job_runs(), datetime.now())
     return render_template("dashboard.html", view=view,
                            rows=rows, summary=summary_of(rows),
+                           groups=sections,
+                           open_group=groups.find(sections,
+                                                  request.args.get("group")),
                            job_rows=job_rows,
                            job_summary=jobs.summarize(job_rows,
                                                       db.job_runs_since(24)),
@@ -189,8 +200,13 @@ def dashboard():
 @app.route("/manage")
 def manage():
     with db.get_conn() as conn:
-        links = conn.execute("SELECT * FROM links ORDER BY name").fetchall()
-    return render_template("manage.html", links=links)
+        links = conn.execute(
+            """SELECT * FROM links
+               ORDER BY group_name = '', group_name COLLATE NOCASE, name"""
+        ).fetchall()
+    return render_template("manage.html", links=links,
+                           group_names=groups.suggestions(
+                               GROUP_ORDER, db.groups_in_use()))
 
 
 @app.route("/links/add", methods=["POST"])
@@ -198,6 +214,8 @@ def add_link():
     name = request.form.get("name", "").strip()
     url = request.form.get("url", "").strip()
     slug = request.form.get("slug", "").strip()
+    group = groups.canonical(request.form.get("group"),
+                             GROUP_ORDER, db.groups_in_use())
     if not name or not url:
         flash("Name and destination URL are required.", "error")
         return redirect(url_for("manage"))
@@ -206,8 +224,8 @@ def add_link():
     with db.get_conn() as conn:
         slug = unique_slug(conn, slugify(slug or name))
         cur = conn.execute(
-            "INSERT INTO links (name, slug, url) VALUES (?, ?, ?)",
-            (name, slug, url))
+            "INSERT INTO links (name, slug, url, group_name) "
+            "VALUES (?, ?, ?, ?)", (name, slug, url, group))
         link_id = cur.lastrowid
     check_one_link(link_id, url, TIMEOUT_S, SSL_VERIFY)   # first status now
     short = request.url_root.rstrip("/") + "/go/" + slug
@@ -227,6 +245,8 @@ def edit_link(link_id):
         name = request.form.get("name", "").strip()
         url = request.form.get("url", "").strip()
         slug = request.form.get("slug", "").strip()
+        group = groups.canonical(request.form.get("group"),
+                                 GROUP_ORDER, db.groups_in_use())
         if not name or not url:
             flash("Name and destination URL are required.", "error")
         else:
@@ -235,11 +255,14 @@ def edit_link(link_id):
             with db.get_conn() as conn:
                 slug = unique_slug(conn, slugify(slug or name), link_id)
                 conn.execute(
-                    """UPDATE links SET name = ?, slug = ?, url = ?
-                       WHERE id = ?""", (name, slug, url, link_id))
+                    """UPDATE links SET name = ?, slug = ?, url = ?,
+                                        group_name = ?
+                       WHERE id = ?""", (name, slug, url, group, link_id))
             flash(f"Link '{name}' updated.", "ok")
             return redirect(url_for("manage"))
-    return render_template("edit.html", link=link)
+    return render_template("edit.html", link=link,
+                           group_names=groups.suggestions(
+                               GROUP_ORDER, db.groups_in_use()))
 
 
 @app.route("/links/<int:link_id>/toggle", methods=["POST"])
@@ -259,6 +282,12 @@ def delete_link(link_id):
 
 
 # ------------------------------------------------------- starting the apps
+
+def back_to_dashboard():
+    """Redirect to the dashboard, to the group the button was pressed in."""
+    group = groups.clean_group(request.form.get("group"))
+    return redirect(url_for("dashboard", group=group or None))
+
 
 def why_not_start(link, processes):
     """Reason this link cannot be started right now, or None if it can.
@@ -303,12 +332,12 @@ def start_link(link_id):
                             (link_id,)).fetchone()
     if link is None:
         flash("Link not found.", "error")
-        return redirect(url_for("dashboard"))
+        return back_to_dashboard()
 
     reason = why_not_start(link, PROCESSES)
     if reason:
         flash(reason, "error")
-        return redirect(url_for("dashboard"))
+        return back_to_dashboard()
 
     problems = start_and_report([link], PROCESSES)
     if problems:
@@ -316,7 +345,7 @@ def start_link(link_id):
     else:
         flash(f"Started '{link['name']}'. If it stays down, see "
               f"logs/ for what it printed.", "ok")
-    return redirect(url_for("dashboard"))
+    return back_to_dashboard()
 
 
 @app.route("/links/<int:link_id>/restart", methods=["POST"])
@@ -331,10 +360,10 @@ def restart_link(link_id):
                             (link_id,)).fetchone()
     if link is None:
         flash("Link not found.", "error")
-        return redirect(url_for("dashboard"))
+        return back_to_dashboard()
     if not PROCESSES.get(link["slug"]):
         flash(f"No start command is configured for '{link['name']}'.", "error")
-        return redirect(url_for("dashboard"))
+        return back_to_dashboard()
 
     problems = start_and_report([link], PROCESSES, runner.restart_link)
     if problems:
@@ -342,7 +371,7 @@ def restart_link(link_id):
     else:
         flash(f"Restarted '{link['name']}'. If it stays down, see "
               f"logs/ for what it printed.", "ok")
-    return redirect(url_for("dashboard"))
+    return back_to_dashboard()
 
 
 @app.route("/services/start-all", methods=["POST"])
@@ -354,7 +383,7 @@ def start_all():
     if not to_start:
         flash("Nothing to start - every app with a start command is "
               "already online.", "ok")
-        return redirect(url_for("dashboard"))
+        return back_to_dashboard()
 
     problems = start_and_report(to_start, PROCESSES)
     names = ", ".join(ln["name"] for ln in to_start)
@@ -364,7 +393,7 @@ def start_all():
     else:
         flash(f"Started {len(to_start)}: {names}. If any stays down, see "
               f"logs/ for what it printed.", "ok")
-    return redirect(url_for("dashboard"))
+    return back_to_dashboard()
 
 
 # ------------------------------------------------- hearing back from jobs
@@ -434,7 +463,7 @@ def job_detail(slug):
 def refresh_now():
     run_health_checks(TIMEOUT_S, SSL_VERIFY)
     flash("Health checks ran just now.", "ok")
-    return redirect(url_for("dashboard"))
+    return back_to_dashboard()
 
 
 # --------------------------------------------------------------- background

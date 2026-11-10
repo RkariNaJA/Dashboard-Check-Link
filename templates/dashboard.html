@@ -83,11 +83,11 @@
         {%- if ns.last %} &middot; last check {{ ns.last[11:16] }}{% endif %}</p>
       <div class="actions">
         {% if summary.startable %}
-        <form method="post" action="{{ url_for('start_all') }}">
+        <form method="post" action="{{ url_for('start_all') }}">{% include "_keep_group.html" %}
           <button class="btn btn-primary" type="submit">Start all down</button>
         </form>
         {% endif %}
-        <form method="post" action="{{ url_for('refresh_now') }}">
+        <form method="post" action="{{ url_for('refresh_now') }}">{% include "_keep_group.html" %}
           <button class="btn" type="submit">Check now</button>
         </form>
       </div>
@@ -229,7 +229,7 @@
       <button class="btn btn-small" type="button" disabled
               title="Already online - nothing to start">Start</button>
     {% else %}
-      <form method="post" action="{{ url_for('start_link', link_id=r.link.id) }}">
+      <form method="post" action="{{ url_for('start_link', link_id=r.link.id) }}">{% include "_keep_group.html" %}
         <button class="btn btn-small" type="submit">Start</button>
       </form>
     {% endif %}
@@ -237,7 +237,7 @@
        Offered online or not: replacing a running old version is the point. #}
     <form method="post"
           action="{{ url_for('restart_link', link_id=r.link.id) }}"
-          onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">
+          onsubmit="return confirm('Restart “{{ r.link.name }}”? Anyone using it right now will be cut off for a few seconds.');">{% include "_keep_group.html" %}
       <button class="btn btn-small" type="submit"
               title="Stop the running copy and start a fresh one">Restart</button>
     </form>
@@ -247,14 +247,47 @@
 {% endmacro %}
 
 {% if rows %}
+{# The page lands on one box per group, in [dashboard] group_order.
+   Clicking one opens its app tiles below (?group=...); clicking it again
+   closes them. A group with a down app is lit red even while closed. #}
 <div class="table-head">
-  <h2>Apps</h2>
-  <span class="count-note">down first &middot; clicks counted at /go/</span>
+  <h2>Groups</h2>
+  <span class="count-note">{{ 'click again to close' if open_group else 'click a group to see its apps' }}</span>
 </div>
-<div class="apps">
-  {% for r in rows if r.link.enabled and r.check and not r.check.ok %}{{ tile(r) }}{% endfor %}
-  {% for r in rows if not (r.link.enabled and r.check and not r.check.ok) %}{{ tile(r) }}{% endfor %}
-</div>
+<nav class="groups" aria-label="App groups">
+  {% for g in groups %}
+  {% set is_open = open_group and open_group.name == g.name %}
+  <a class="group-box{{ ' is-down' if g.down }}{{ ' is-up' if not g.down and g.active and g.online == g.active }}{{ ' is-open' if is_open }}"
+     href="{{ url_for('dashboard') if is_open else url_for('dashboard', group=g.name) }}"
+     {%- if is_open %} aria-current="true"{% endif %}>
+    <span class="group-top">
+      <span class="group-name">{{ g.name }}</span>
+      <span class="group-chev" aria-hidden="true">{{ '&minus;' | safe if is_open else '+' }}</span>
+    </span>
+    <span class="group-figs">
+      <span class="group-num">{{ g.online }}<small>/ {{ g.active }} online</small></span>
+      {% if g.down %}<span class="status status-bad"><span class="dot"></span>{{ g.down }} down</span>{% endif %}
+    </span>
+    <span class="fleet group-fleet" aria-hidden="true">
+      {%- for r in g.rows %}<span class="{{ 'is-ok' if r.link.enabled and r.check and r.check.ok else ('is-bad' if r.link.enabled and r.check) }}" title="{{ r.link.name }}"></span>{% endfor -%}
+    </span>
+    <span class="group-count">{{ g.rows | length }} {{ 'app' if g.rows | length == 1 else 'apps' }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+{% if open_group %}
+<section class="app-group" aria-labelledby="open-group">
+  <div class="table-head">
+    <h2 id="open-group">{{ open_group.name }}</h2>
+    <span class="count-note">down first &middot; clicks counted at /go/</span>
+  </div>
+  <div class="apps">
+    {% for r in open_group.rows %}{{ tile(r) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
+{# every pop-up, so a shared /#detail-3 link opens from any group #}
 {% for r in rows %}{% include "_link_detail.html" %}{% endfor %}
 {% else %}
 <div class="empty">
