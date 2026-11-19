@@ -15,9 +15,44 @@ import runner
 from collector import check_one_link, run_health_checks
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_VAR = re.compile(r"\$\{(\w+)\}")
 
-config = configparser.ConfigParser(interpolation=None)
-config.read(os.path.join(BASE_DIR, "config.ini"))
+
+def load_env(path):
+    """Read KEY=value lines from a .env file (missing file = no values)."""
+    values = {}
+    if not os.path.exists(path):
+        return values
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def read_config(path, env):
+    """Parse config.ini, filling ${NAME} from env (.env values, then OS)."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+
+    def fill(match):
+        name = match.group(1)
+        value = env.get(name, os.environ.get(name))
+        if value is None:
+            print(f"[config] WARNING: ${{{name}}} is not set in .env")
+            return match.group(0)
+        return value
+
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read_string(ENV_VAR.sub(fill, text))
+    return parser
+
+
+config = read_config(os.path.join(BASE_DIR, "config.ini"),
+                     load_env(os.path.join(BASE_DIR, ".env")))
 
 CHECK_MIN = config.getint("health", "check_interval_minutes", fallback=5)
 TIMEOUT_S = config.getint("health", "timeout_seconds", fallback=10)
