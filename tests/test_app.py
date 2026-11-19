@@ -258,3 +258,20 @@ def test_dashboard_offers_no_restart_for_an_unconfigured_link(
     html = app_module.app.test_client().get("/").get_data(as_text=True)
 
     assert f"/links/{link_id}/restart" not in html
+
+
+# ------------------------------------------------------- config from .env
+
+def test_config_fills_placeholders_from_env_file(tmp_path):
+    (tmp_path / ".env").write_text("# note\nSERVER_IP=10.1.2.3\n",
+                                   encoding="utf-8")
+    (tmp_path / "config.ini").write_text(
+        "[process:x]\ncommand = run --host ${SERVER_IP}\n"
+        "other = ${NOT_SET_ANYWHERE}\n", encoding="utf-8")
+
+    parsed = app_module.read_config(
+        str(tmp_path / "config.ini"),
+        app_module.load_env(str(tmp_path / ".env")))
+
+    assert parsed.get("process:x", "command") == "run --host 10.1.2.3"
+    assert parsed.get("process:x", "other") == "${NOT_SET_ANYWHERE}"
